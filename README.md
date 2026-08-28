@@ -1,23 +1,57 @@
-alamem is an approximate local alignment tool written specifically to replicate many of the functions of BLAT, but allowing for streaming the database rather than the query to save memory, and also to be faster by avoiding base-level extension and using ideas from probabilistic sketching and pseudo-matching statistics instead.
+# alamem - Approximate Local Alignment via chained MEMs
 
-The basic algorithm is just seed and chain without full extension. Major points are as follows:
- - alamem indexes the query and streams the database across the query index, so that we can search very large databases (like the GTDB), whose indices won't fit into memory.
- - alamem uses a default seed and stride size of 11, matching that of BLAT, though this is configurable, and then extends anchors using exact match to get MEMs.
- - MEMs are chained together, with a maximum gap length of 100 (configurable).
- - Unlike algorithms like BLAT, alamem doesn't do any alignment after chaining. Instead, we use a combination of average MEM length, aligned gap lengths, and unaligned gap lengths to approximate ANI (see paper).
- - Only hits with a lower-bound chain ANI of at least 90% (configurable) are kept.
- - Only hits of length at least 40 (configurable) are returned.
+## Introduction
 
-## Install and run instructions
-After cloning the repo, compile via 
+**alamem** is a program for finding local alignments between a query and a reference database of genomes above a specified **average nucleotide identity** (ANI) and length. It is designed to work in the ANI > ~90% and length > 40bp regime, to operate as a mostly drop-in replacement for BLAT hits.
 
-```
+alamem uses an approximate mapping method without base-level alignment to get both hits and ANI---notably, it uses MEMs to get base-level resolution at the boundaries, but then uses pseudo-matching statistics to estimate ANI of the region covered by the MEM chains. It is over an order of magnitude faster than BLAT, but seems empirically get get fairly comparable results. alamem offers:
+
+1. **No preprocessing**. We don't require any pre-indexing of the reference database. Instead, for every run, alamem streams over the database in plain FASTA or FASTA.gz format.
+
+2. **Low RAM Usage**. Because alamem streams the database, most of the memory that is used is just keeping track of the query index and any hits that come out. For bacterial genomes as queries, ~4 GB of RAM is more than sufficient; for smaller queries, <1 GB of RAM is required.
+
+3. **Fast computations**. We entirely avoid base-level dynamic programming for extension by using pseudo-matching statistics to compute ANI. This means we are just doing seed+chain, rather than seed+chain+extend. Querying a genome against an (unpreprocessed) database of >85000 prokaryotic genomes takes less than an hour in single-threaded mode with 4GB of RAM. On a 64-core machine, this allows the entire computation to happen in less than a minute.
+
+## Updates
+
+See the [CHANGELOG](https://github.com/yunwilliamyu/alamem/blob/main/CHANGELOG.md) for alamem's full versioning history. [TODO]
+
+## Install
+
+#### Option 1: Build from source
+
+Requirements:
+1. [rust](https://www.rust-lang.org/tools/install) programming language and associated tools such as cargo are required and assumed to be in PATH.
+
+Building takes around a minute (depending on # of cores).
+
+```sh
+git clone https://github.com/yunwilliamyu/alamem
+cd alamem
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
 
-Then run
+<!--
+#### Option 2: Conda
+```sh
+conda install -c bioconda skani
 ```
-target/release/alamem reference_list.txt query.fna[.gz] out.txt
+-->
+
+#### Option 2: Pre-built x86-64 linux statically compiled executable
+We offer a pre-built statically compiled executable for x86-64 systems. That is, if you're on an x86-64 Linux system, you can just download the binary and run it without installing anything.
+
+For using the latest version of alamem:
+```sh
+wget https://github.com/yunwilliamyu/alamem/releases/download/latest/alamem
+chmod +x alamem
+./alamem -h
+```
+**Important**: the binary runs slightly slower (~10%) most of the time, but it can sometimes be drastically slower than compiling it from scratch for your machine.
+
+## Quick start
+```sh
+alamem reference_list.txt query.fna[.gz] out.txt
 ```
 
 reference_list.txt should be a newline-delimited list of all genomes (gzipped is fine)
