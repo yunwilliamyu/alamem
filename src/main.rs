@@ -148,7 +148,12 @@ fn main() {
 
     {
         let mut handle = writer.lock().unwrap();
-        writeln!(handle, "Query\tTarget\tQ_Size\tQ_Start\tQ_End\tT_Size\tT_Start\tT_End\tStrand\tANI\tScore").unwrap();
+        // Because I messed up naming of variables, so the column labels don't correspond to variable names
+        // TODO: refactor so variable names match column labels
+        // (refactor needed is in the variable names for the compute_chunk text_buffer)
+        // For now, use temporary cludge of just renaming the columns.
+        //writeln!(handle, "Query\tTarget\tQ_Size\tQ_Start\tQ_End\tT_Size\tT_Start\tT_End\tStrand\tANI\tScore").unwrap();
+        writeln!(handle, "Reference\tQuery\tR_Size\tR_Start\tR_End\tQ_Size\tQ_Start\tQ_End\tStrand\tANI\tScore").unwrap();
     }
 
     let y_index: YIndex = YIndex::build(&y_files);
