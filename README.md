@@ -29,6 +29,7 @@ Building takes around a minute (depending on # of cores).
 git clone https://github.com/yunwilliamyu/alamem
 cd alamem
 RUSTFLAGS="-C target-cpu=native" cargo install --path .
+alamem -h
 ```
 
 <!--
