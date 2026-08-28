@@ -61,3 +61,34 @@ out.txt will be where results are written.
 
 Note that alamem is almost symmetric with respect to reference and query in terms of output, but you should have the query be the shorter sequence, so that indexing is fast. alamem is fast enough that we can just stream the much larger reference database.
 
+## Output
+The output looks like:
+```
+Query   Target  Q_Size  Q_Start Q_End   T_Size  T_Start T_End   Strand  ANI     Score
+NZ_LT891965.1   AE009951.2      5353    3923    4380    2174500 2047354 2047816 +       92.55   404
+```
+Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
+
+**In the process of writing this documentation, I realized that I really should swap Query and Target, which I'll do in the next release. Apologies for the confusingly named fields.**
+- Query: this is the reference database sequence
+- Target: this is the query sequence
+- Q_Size: total length of Query sequence (not just the hit!)
+- Q_Start: starting point of hit on Query
+- Q_End: ending point of hit on Query
+- T_Size: total length of Target sequence (not just the hit!)
+- T_Start: starting point of hit on Target
+- T_End: ending point of hit on Taget
+- Strand: whether or not it was a forward match or a reverse complement match (+/-)
+- ANI: estimated average nucleotide identity
+- Score: estimated number of matching bases
+
+The order of results is depend on parallelization and not guaranteed to be deterministic. Typically, all the hits for a Query/Target pair will be grouped together, but **this is not guaranteed** depending on batching of jobs, so you will need to do your own filtering.
+
+## Citation
+Grace Oualline, Sakshi Pandey, Xiaolei Brian Zhang, Christina Boucher, and Yun William Yu. Approximate local alignment via chained MEM divergence estimation for detecting horizontal gene transfer. *In preparation*.
+
+## Feature requests, issues
+alamem is actively being developed by me ([Yun William Yu](https://yunwilliamyu.net)). I'm more than happy to accommodate simple feature requests. Feel free to open an issue with your feature request on the GitHub repository. If you catch any bugs, please open an issue or e-mail me.
+
+## Credit
+This README's structure (and some wording) was copied from ([Jim Shaw](https://jim-shaw-bluenote.github.io/))'s ([skani](https://github.com/bluenote-1577/skani)) README. Thanks, Jim!
