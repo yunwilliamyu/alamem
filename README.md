@@ -21,7 +21,12 @@ See the [CHANGELOG](https://github.com/yunwilliamyu/alamem/blob/main/CHANGELOG.m
 #### Option 1: Build from source
 
 Requirements:
-1. [rust](https://www.rust-lang.org/tools/install) programming language and associated tools such as cargo are required and assumed to be in PATH.
+1. [rust](https://www.rust-lang.org/tools/install) programming language and associated tools such as cargo are required and assumed to be in PATH. To download rust and add it to your path, run the following:
+```sh
+sudo snap install rustup --classic
+rustup default stable
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
 
 Building takes around a minute (depending on # of cores).
 
@@ -53,6 +58,10 @@ chmod +x alamem
 ## Quick start
 ```sh
 alamem reference_list.txt query.fna[.gz] out.txt
+
+# test, inserted a chunk of NZ_CP013494.1 randomly inside another sequence
+# output should show NZ_CP013494.1 between 2424 and 15275
+alamem test/test_seq.txt test/NZ_CP013494.1.fna test/test_alamem_out.txt
 ```
 
 reference_list.txt should be a newline-delimited list of all genomes (gzipped is fine)
@@ -64,8 +73,8 @@ Note that alamem is almost symmetric with respect to reference and query in term
 ## Output
 The output looks like:
 ```
-Query   Target  Q_Size  Q_Start Q_End   T_Size  T_Start T_End   Strand  ANI     Score
-NZ_LT891965.1   AE009951.2      5353    3923    4380    2174500 2047354 2047816 +       92.55   404
+Query	Target	Q_Size	Q_Start	Q_End	T_Size	T_Start	T_End	Strand	ANI	Score
+hidden_NZ_CP013494.1,2424,15275	NZ_CP013494.1	100000	2424	15275	742499	560168	573019	+	100.00	12851
 ```
 Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
 

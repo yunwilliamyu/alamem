@@ -1,0 +1,1 @@
+test/hidden_NZ_CP013494.1,2424,15275.fasta
