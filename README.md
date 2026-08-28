@@ -43,7 +43,7 @@ We offer a pre-built statically compiled executable for x86-64 systems. That is,
 
 For using the latest version of alamem:
 ```sh
-wget https://github.com/yunwilliamyu/alamem/releases/download/latest/alamem
+wget https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem
 chmod +x alamem
 ./alamem -h
 ```
