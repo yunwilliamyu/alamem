@@ -14,7 +14,7 @@ alamem uses an approximate mapping method without base-level alignment to get bo
 
 ## Updates
 
-See the [CHANGELOG](https://github.com/yunwilliamyu/alamem/blob/main/CHANGELOG.md) for alamem's full versioning history. [TODO]
+See the [CHANGELOG](https://github.com/yunwilliamyu/alamem/blob/main/CHANGELOG.md) for alamem's full versioning history.
 
 ## Install
 
