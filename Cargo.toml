@@ -1,0 +1,31 @@
+[package]
+name = "alamem"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indicatif = "0.18"
+rustc-hash = "2.1"
+rayon = "1.7"
+needletail = "0.7"
+flate2 = { version = "1.0", features = ["zlib-ng"] }
+mimalloc = "0.1"
+clap = { version = "4.6", features= ["derive"]}
+libc = "0.2"
+crossbeam = "0.8"
+memchr = "2.7"
+
+[profile.release]
+opt-level = 3            # Maximizes aggressive speed optimizations (Default: 3)
+lto = "fat"              # Enables global, cross-crate Link-Time Optimization
+codegen-units = 1        # Forces single-threaded backend compilation for best inlining
+panic = "abort"          # Eliminates unwinding overhead, reducing binary size and checks
+strip = true
+debug = false
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
+lto = false 
+opt-level = 1
