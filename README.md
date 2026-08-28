@@ -53,7 +53,7 @@ wget https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem
 chmod +x alamem
 ./alamem -h
 ```
-**Important**: the binary runs slightly slower (~10%) most of the time, but it can sometimes be drastically slower than compiling it from scratch for your machine.
+**Important**: the binary is slower by about 20% on uncompressed FASTA databases, and up to 50% on gzipped FASTA databases. It is here for convenience, but we recommend compiling for your architecture using Option 1.
 
 ## Quick start
 ```sh
