@@ -69,15 +69,14 @@ NZ_LT891965.1   AE009951.2      5353    3923    4380    2174500 2047354 2047816 
 ```
 Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
 
-**In the process of writing this documentation, I realized that I really should swap Query and Target, which I'll do in the next release. Apologies for the confusingly named fields.**
-- Query: this is the reference database sequence
-- Target: this is the query sequence
-- Q_Size: total length of Query sequence (not just the hit!)
-- Q_Start: starting point of hit on Query
-- Q_End: ending point of hit on Query
-- T_Size: total length of Target sequence (not just the hit!)
-- T_Start: starting point of hit on Target
-- T_End: ending point of hit on Taget
+- Reference: this is the reference database sequence
+- Query: this is the query sequence
+- R_Size: total length of Query sequence (not just the hit!)
+- R_Start: starting point of hit on Query
+- R_End: ending point of hit on Query
+- Q_Size: total length of Target sequence (not just the hit!)
+- Q_Start: starting point of hit on Target
+- Q_End: ending point of hit on Taget
 - Strand: whether or not it was a forward match or a reverse complement match (+/-)
 - ANI: estimated average nucleotide identity
 - Score: estimated number of matching bases
