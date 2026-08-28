@@ -71,12 +71,12 @@ Notice that we are using the sequence ID, rather than the FASTA file name, so if
 
 - Reference: this is the reference database sequence
 - Query: this is the query sequence
-- R_Size: total length of Query sequence (not just the hit!)
-- R_Start: starting point of hit on Query
-- R_End: ending point of hit on Query
-- Q_Size: total length of Target sequence (not just the hit!)
-- Q_Start: starting point of hit on Target
-- Q_End: ending point of hit on Taget
+- R_Size: total length of reference sequence (not just the hit!)
+- R_Start: starting point of hit on reference 
+- R_End: ending point of hit on reference 
+- Q_Size: total length of query sequence (not just the hit!)
+- Q_Start: starting point of hit on query
+- Q_End: ending point of hit on query
 - Strand: whether or not it was a forward match or a reverse complement match (+/-)
 - ANI: estimated average nucleotide identity
 - Score: estimated number of matching bases
