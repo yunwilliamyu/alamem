@@ -71,9 +71,9 @@ out.txt will be where results are written.
 Note that alamem is almost symmetric with respect to reference and query in terms of output, but you should have the query be the shorter sequence, so that indexing is fast. alamem is fast enough that we can just stream the much larger reference database.
 
 ## Output
-The output looks like:
+The output test/test_alamem_out.txt looks like:
 ```
-Query	Target	Q_Size	Q_Start	Q_End	T_Size	T_Start	T_End	Strand	ANI	Score
+Reference	Query	R_Size	R_Start	R_End	Q_Size	Q_Start	Q_End	Strand	ANI	Score
 hidden_NZ_CP013494.1,2424,15275	NZ_CP013494.1	100000	2424	15275	742499	560168	573019	+	100.00	12851
 ```
 Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
