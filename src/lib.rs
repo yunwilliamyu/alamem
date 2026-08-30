@@ -481,8 +481,7 @@ fn rev_comp_u32(h_fwd: u32, k: usize) -> u32 {
     let mut x = h_fwd;
     x = ((x >> 2) & 0x3333_3333) | ((x & 0x3333_3333) << 2);
     x = ((x >> 4) & 0x0F0F_0F0F) | ((x & 0x0F0F_0F0F) << 4);
-    x = ((x >> 8) & 0x00FF_00FF) | ((x & 0x00FF_00FF) << 8);
-    x = (x >> 16) | (x << 16);
+    x = x.swap_bytes();
     (!x) >> (32 - (2 * k))
 }
 /// Validates all k bases in a single pass using two overlapping 64-bit reads.
