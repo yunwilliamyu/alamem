@@ -1,5 +1,6 @@
 [![Rust](https://github.com/yunwilliamyu/alamem/actions/workflows/rust.yml/badge.svg)](https://github.com/yunwilliamyu/alamem/actions/workflows/rust.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/github/v/release/yunwilliamyu/alamem)](https://github.com/yunwilliamyu/alamem/releases)
 
 # alamem - Approximate Local Alignment via chained MEMs
 
