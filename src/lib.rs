@@ -555,29 +555,33 @@ pub fn get_anchors(
 
             let t_positions = y_index.get_kmer(canonical);
 
-            if !t_positions.is_empty()  {
-                let q_is_rev = h_fwd != canonical;
-                let q_pos = i as u32;
-                let rc_pos = (q_len - k - i) as u32;
-
-                for t_pos in t_positions {
-                    let t_is_rev = (t_pos.pos & 0x8000_0000) != 0;
-                    let actual_t_pos = t_pos.pos & 0x7FFF_FFFF;
-
-                    let (target_buf, active_q_pos) = if q_is_rev == t_is_rev {
-                        (&mut bufs.anchors_fwd, q_pos)
-                    } else {
-                        (&mut bufs.anchors_rev, rc_pos)
-                    };
-
-                    target_buf.push(Anchor {
-                        t_id: t_pos.seq_id,
-                        q_pos: active_q_pos,
-                        t_pos: actual_t_pos,
-                        diag: actual_t_pos as i64 - active_q_pos as i64,
-                    });
-                }
+            if t_positions.is_empty() {
+                i += stride;
+                continue;
             }
+
+            let q_is_rev = h_fwd != canonical;
+            let q_pos = i as u32;
+            let rc_pos = (q_len - k - i) as u32;
+
+            for t_pos in t_positions {
+                let t_is_rev = (t_pos.pos & 0x8000_0000) != 0;
+                let actual_t_pos = t_pos.pos & 0x7FFF_FFFF;
+
+                let (target_buf, active_q_pos) = if q_is_rev == t_is_rev {
+                    (&mut bufs.anchors_fwd, q_pos)
+                } else {
+                    (&mut bufs.anchors_rev, rc_pos)
+                };
+
+                target_buf.push(Anchor {
+                    t_id: t_pos.seq_id,
+                    q_pos: active_q_pos,
+                    t_pos: actual_t_pos,
+                    diag: actual_t_pos as i64 - active_q_pos as i64,
+                });
+            }
+
 
             i += stride;
         }
@@ -747,30 +751,33 @@ pub fn align_strand(
                 let t_added = h_i.t_end - h_j.t_end.max(h_i.t_start);
                 let added_match = q_added.min(t_added).max(0);
 
-                if added_match > 0 {
-                    let diag_diff = (h_i.diag - h_j.diag).abs().min(max_gap as i64) as i32;
-                    let unaligned_gap = if diag_diff <= 2 && (true_q_gap == 0 || true_t_gap == 0) {
-                        0
-                    } else {
-                        diag_diff
-                    };
-
-                    let aligned_gap = true_q_gap.min(true_t_gap);
-
-                    // Fixed-point integer math (>> 8 is roughly equivalent to / 256)
-                    let gap_matches = if aligned_gap > 2 {
-                        //((aligned_gap - 2) as f64 * expected_ani) as i32
-                        ((aligned_gap - 2) * ani_fixed_mult) >> 8
-                    } else {
-                        0
-                    };
-
-                    let chain_score = bufs.scores[j_chain] + added_match + gap_matches - unaligned_gap;
-                    if chain_score > bufs.scores[i_chain] {
-                        bufs.scores[i_chain] = chain_score;
-                        bufs.preds[i_chain] = j_chain;
-                    }
+                if added_match == 0 {
+                    continue;
                 }
+
+                let diag_diff = (h_i.diag - h_j.diag).abs().min(max_gap as i64) as i32;
+                let unaligned_gap = if diag_diff <= 2 && (true_q_gap == 0 || true_t_gap == 0) {
+                    0
+                } else {
+                    diag_diff
+                };
+
+                let aligned_gap = true_q_gap.min(true_t_gap);
+
+                // Fixed-point integer math (>> 8 is roughly equivalent to / 256)
+                let gap_matches = if aligned_gap > 2 {
+                    //((aligned_gap - 2) as f64 * expected_ani) as i32
+                    ((aligned_gap - 2) * ani_fixed_mult) >> 8
+                } else {
+                    0
+                };
+
+                let chain_score = bufs.scores[j_chain] + added_match + gap_matches - unaligned_gap;
+                if chain_score > bufs.scores[i_chain] {
+                    bufs.scores[i_chain] = chain_score;
+                    bufs.preds[i_chain] = j_chain;
+                }
+
             }
         }
 
