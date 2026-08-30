@@ -584,29 +584,7 @@ pub fn get_anchors(
     }
 
     match (k, stride) {
-        // HOT PATHS: Fully constant, heavily unrolled.
-
-        (9, 9)   => run(q_seq, y_index, bufs, 9, 9,   |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
-        (9, 11)  => run(q_seq, y_index, bufs, 9, 11,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
-        (9, 13)  => run(q_seq, y_index, bufs, 9, 13,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
-        (9, 15)  => run(q_seq, y_index, bufs, 9, 15,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
-
-        (11, 9)  => run(q_seq, y_index, bufs, 11, 9,  |c| if is_invalid_k8_16::<11>(c) { None }  else { Some(hash_k_fast::<11>(c)) }),
-        (11, 11) => run(q_seq, y_index, bufs, 11, 11, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
-        (11, 13) => run(q_seq, y_index, bufs, 11, 13, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
-        (11, 15) => run(q_seq, y_index, bufs, 11, 15, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
-
-        (13, 9)  => run(q_seq, y_index, bufs, 13, 9,  |c| if is_invalid_k8_16::<13>(c) { None }  else { Some(hash_k_fast::<13>(c)) }),
-        (13, 11) => run(q_seq, y_index, bufs, 13, 11, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
-        (13, 13) => run(q_seq, y_index, bufs, 13, 13, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
-        (13, 15) => run(q_seq, y_index, bufs, 13, 15, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
-
-        (15, 9)  => run(q_seq, y_index, bufs, 15, 9,  |c| if is_invalid_k8_16::<15>(c) { None }  else { Some(hash_k_fast::<15>(c)) }),
-        (15, 11) => run(q_seq, y_index, bufs, 15, 11, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
-        (15, 13) => run(q_seq, y_index, bufs, 15, 13, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
-        (15, 15) => run(q_seq, y_index, bufs, 15, 15, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
-
-
+        // HOT PATHS
         (9, _)   => run(q_seq, y_index, bufs, 9, stride,   |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
         (11, _) => run(q_seq, y_index, bufs, 11, stride, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
         (13, _) => run(q_seq, y_index, bufs, 13, stride, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
