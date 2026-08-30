@@ -1,6 +1,6 @@
 [package]
 name = "alamem"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
@@ -33,3 +33,7 @@ debug = true
 strip = false
 lto = false 
 opt-level = 1
+
+[[example]]
+name = "ani_simulator"
+path = "examples/ani_simulator.rs"
