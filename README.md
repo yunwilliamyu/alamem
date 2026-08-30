@@ -71,7 +71,7 @@ alamem NZ_CP013494.1.fna hidden_NZ_CP013494.1,2424,15275.fasta test_alamem_out.t
 
 Both the reference and the query can either be a single FASTA file or a newline-delimited list of paths to a collection of FASTA files (gzipped is fine).
 
-out.txt will be where results are (over)written.
+`out.txt` will be where results are (over)written.
 
 Note that alamem is almost symmetric with respect to reference and query in terms of output, but you should have the query be the shorter sequence, so that indexing is fast. alamem is fast enough that we can just stream the much larger reference database.
 
