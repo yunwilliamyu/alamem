@@ -536,7 +536,7 @@ pub fn get_anchors(
         stride: usize,
         mut get_hash: F,
     ) where
-    F: FnMut(&[u8]) -> Result<u32, usize>,
+    F: FnMut(&[u8]) -> Option<u32>,
     {
         let q_len = q_seq.len();
         let mut i = 0;
@@ -545,9 +545,9 @@ pub fn get_anchors(
 
             let chunk = unsafe { q_seq.get_unchecked(i..i + k) };
 
-            let h_fwd = match get_hash(chunk) {
-                Ok(h) => h,
-                Err(skip) => { i += skip; continue; }
+            let Some(h_fwd) = get_hash(chunk) else {
+                i += stride;
+                continue;
             };
 
             let h_rev = rev_comp_u32(h_fwd, k);
@@ -579,31 +579,47 @@ pub fn get_anchors(
                 }
             }
 
-
             i += stride;
         }
     }
 
-    match k {
-        9 => run(q_seq, y_index, bufs, 9, stride, |c| {
-            if is_invalid_k8_16::<9>(c) { Err(stride) } else { Ok(hash_k_fast::<9>(c)) }
-        }),
-        11 => run(q_seq, y_index, bufs, 11, stride, |c| {
-            if is_invalid_k8_16::<11>(c) { Err(stride) } else { Ok(hash_k_fast::<11>(c)) }
-        }),
-        13 => run(q_seq, y_index, bufs, 13, stride, |c| {
-            if is_invalid_k8_16::<13>(c) { Err(stride) } else { Ok(hash_k_fast::<13>(c)) }
-        }),
-        15 => run(q_seq, y_index, bufs, 15, stride, |c| {
-            if is_invalid_k8_16::<15>(c) { Err(stride) } else { Ok(hash_k_fast::<15>(c)) }
-        }),
+    match (k, stride) {
+        // HOT PATHS: Fully constant, heavily unrolled.
+
+        (9, 9)   => run(q_seq, y_index, bufs, 9, 9,   |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
+        (9, 11)  => run(q_seq, y_index, bufs, 9, 11,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
+        (9, 13)  => run(q_seq, y_index, bufs, 9, 13,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
+        (9, 15)  => run(q_seq, y_index, bufs, 9, 15,  |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
+
+        (11, 9)  => run(q_seq, y_index, bufs, 11, 9,  |c| if is_invalid_k8_16::<11>(c) { None }  else { Some(hash_k_fast::<11>(c)) }),
+        (11, 11) => run(q_seq, y_index, bufs, 11, 11, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
+        (11, 13) => run(q_seq, y_index, bufs, 11, 13, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
+        (11, 15) => run(q_seq, y_index, bufs, 11, 15, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
+
+        (13, 9)  => run(q_seq, y_index, bufs, 13, 9,  |c| if is_invalid_k8_16::<13>(c) { None }  else { Some(hash_k_fast::<13>(c)) }),
+        (13, 11) => run(q_seq, y_index, bufs, 13, 11, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
+        (13, 13) => run(q_seq, y_index, bufs, 13, 13, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
+        (13, 15) => run(q_seq, y_index, bufs, 13, 15, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
+
+        (15, 9)  => run(q_seq, y_index, bufs, 15, 9,  |c| if is_invalid_k8_16::<15>(c) { None }  else { Some(hash_k_fast::<15>(c)) }),
+        (15, 11) => run(q_seq, y_index, bufs, 15, 11, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
+        (15, 13) => run(q_seq, y_index, bufs, 15, 13, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
+        (15, 15) => run(q_seq, y_index, bufs, 15, 15, |c| if is_invalid_k8_16::<15>(c) { None } else { Some(hash_k_fast::<15>(c)) }),
+
+
+        (9, _)   => run(q_seq, y_index, bufs, 9, stride,   |c| if is_invalid_k8_16::<9>(c)  { None } else { Some(hash_k_fast::<9>(c)) }),
+        (11, _) => run(q_seq, y_index, bufs, 11, stride, |c| if is_invalid_k8_16::<11>(c) { None } else { Some(hash_k_fast::<11>(c)) }),
+        (13, _) => run(q_seq, y_index, bufs, 13, stride, |c| if is_invalid_k8_16::<13>(c) { None } else { Some(hash_k_fast::<13>(c)) }),
+        (15, _)  => run(q_seq, y_index, bufs, 15, stride,  |c| if is_invalid_k8_16::<15>(c) { None }  else { Some(hash_k_fast::<15>(c)) }),
+
+        // GENERIC FALLBACK
         _ => run(q_seq, y_index, bufs, k, stride, |c| {
             let mut h = 0u32;
             for &val in c {
-                if val > 3 { return Err(stride); }
+                if val > 3 { return None; }
                 h = (h << 2) | (val as u32);
             }
-            Ok(h)
+            Some(h)
         }),
     }
 }
