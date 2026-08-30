@@ -15,6 +15,10 @@ libc = "0.2"
 crossbeam = "0.8"
 memchr = "2.7"
 
+[dev-dependencies]
+assert_cmd = "2.0"
+tempfile = "3.10"
+
 [profile.release]
 opt-level = 3            # Maximizes aggressive speed optimizations (Default: 3)
 lto = "fat"              # Enables global, cross-crate Link-Time Optimization
