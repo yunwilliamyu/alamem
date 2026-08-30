@@ -799,7 +799,8 @@ pub fn align_strand(
             let total_mem_len: usize = bufs.chain.iter().map(|m| m.len as usize).sum();
             let avg_mem_len: f64 = total_mem_len as f64 / bufs.chain.len() as f64;
             let true_mean_len: f64 = (avg_mem_len - config.kmer_size as f64).max(1.0);
-            let regional_expected_ani: f64 = 1.0 - (1.0 / true_mean_len);
+            //let regional_expected_ani: f64 = 1.0 - (1.0 / true_mean_len);
+            let regional_expected_ani: f64 = true_mean_len / (true_mean_len + 1.0);
 
             let final_q_start: usize = first.q_start as usize;
             let final_q_end: usize = last.q_end as usize;
@@ -807,15 +808,16 @@ pub fn align_strand(
             let final_t_end: usize = last.t_end as usize;
 
             let mut total_matches: f64 = 0.0;
+            let mut total_align_span: usize = 0;
 
             let mut last_q_end = first.q_start;
             let mut last_t_end = first.t_start;
 
             for (i, h) in bufs.chain.iter().enumerate() {
+                let q_gap = (h.q_start - last_q_end).max(0);
+                let t_gap = (h.t_start - last_t_end).max(0);
                 if i > 0 {
                     // calculate gap sizes between previous MEM and current MEM
-                    let q_gap = (h.q_start - last_q_end).max(0);
-                    let t_gap = (h.t_start - last_t_end).max(0);
                     let aligned_gap = q_gap.min(t_gap);
 
                     // We assume that any non indel region has the background ANI
@@ -827,10 +829,14 @@ pub fn align_strand(
                     }
                 }
 
+                total_align_span += q_gap.max(t_gap) as usize;
+
                 let q_added_ani = h.q_end.saturating_sub(last_q_end.max(h.q_start));
                 let t_added_ani = h.t_end.saturating_sub(last_t_end.max(h.t_start));
 
                 total_matches += q_added_ani.min(t_added_ani) as f64;
+
+                total_align_span += q_added_ani.max(t_added_ani) as usize;
 
                 last_q_end = last_q_end.max(h.q_end);
                 last_t_end = last_t_end.max(h.t_end);
@@ -841,7 +847,7 @@ pub fn align_strand(
             let max_span = q_span.max(t_span);
 
             let actual_ani: f64 = if max_span > 0 {
-                (total_matches / max_span as f64) * 100.0
+                (total_matches / total_align_span as f64) * 100.0
             } else {
                 0.0
             };
