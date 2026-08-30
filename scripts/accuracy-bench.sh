@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 cd "$(git rev-parse --show-toplevel)" || exit 1
-cd benches
+cd scripts
 echo "Compiling ani_simulator in release mode"
 RUSTFLAGS="-C target-cpu=native" cargo build --example ani_simulator --release
 

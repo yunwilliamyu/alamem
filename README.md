@@ -98,6 +98,14 @@ Notice that we are using the sequence ID, rather than the FASTA file name, so if
 
 The order of results is depend on parallelization and not guaranteed to be deterministic. Typically, all the hits for a Query/Target pair will be grouped together, but **this is not guaranteed** depending on batching of jobs, so you will need to do your own filtering.
 
+## Benchmarking
+
+To run the accuracy benchmarks using the examples/ani_simulator.rs tool:
+```bash
+scripts/accuracy-bench.sh
+```
+This will produce `scripts/figures/accuracy.[tsv|png]`, which should be identical to the provided `scripts/snapshots/accuracy.[tsv|png]`, and is found in Figure 1 of the manuscript.
+
 ## Citation
 Grace Oualline, Sakshi Pandey, Xiaolei Brian Zhang, Christina Boucher, and Yun William Yu. Approximate local alignment via chained MEM divergence estimation for detecting horizontal gene transfer. *In preparation*.
 
