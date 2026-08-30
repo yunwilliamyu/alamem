@@ -1,3 +1,4 @@
+[![Rust CI](https://github.com)](https://github.com)
 # alamem - Approximate Local Alignment via chained MEMs
 
 ## Introduction
