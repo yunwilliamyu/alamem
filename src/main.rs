@@ -236,7 +236,7 @@ fn main() {
                 chunk.memory.extend_from_slice(id_word);
                 let id_end = chunk.memory.len();
 
-                let seq_slice = rec.seq();
+                let seq_slice = rec.raw_seq();
                 let seq_start = chunk.memory.len();
                 chunk.memory.extend_from_slice(&seq_slice);
                 let seq_end = chunk.memory.len();

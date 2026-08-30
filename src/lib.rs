@@ -60,123 +60,14 @@ pub struct AlignConfig {
 // The global, thread-safe container for your runtime configuration
 pub static CONFIG: OnceLock<AlignConfig> = OnceLock::new();
 
-
-/// Safe, cross-platform entry point
-pub fn vectorize_base_lookup(seq: &[u8], out: &mut [u8]) {
-    // 1. Try x86-64 AVX2
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe {
-                vectorize_base_lookup_avx2(seq, out);
-                return;
-            }
-        }
-    }
-
-    // 2. Try ARM NEON (Apple Silicon, AWS Graviton)
-    #[cfg(target_arch = "aarch64")]
-    {
-        if std::arch::is_aarch64_feature_detected!("neon") {
-            unsafe {
-                vectorize_base_lookup_neon(seq, out);
-                return;
-            }
-        }
-    }
-
-    // 3. Universal Scalar Fallback (WASM, older CPUs, RISC-V)
-    vectorize_base_lookup_scalar(seq, out);
-}
-
-/// The universal fallback loop you already wrote
-fn vectorize_base_lookup_scalar(seq: &[u8], out: &mut [u8]) {
-    for j in 0..seq.len() {
-        let b = seq[j] & 0x0F;
-        out[j] = match b {
-            1 => 0,       // A
-            3 => 1,       // C
-            4 | 5 => 3,   // T or U
-            7 => 2,       // G
-            _ => 128,     // N
-        };
-    }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
-unsafe fn vectorize_base_lookup_avx2(seq: &[u8], out: &mut [u8]) {
-    #[cfg(target_arch = "x86")]
-    use std::arch::x86::*;
-    #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::*;
-
-    let mask = _mm256_set1_epi8(0x0F);
-    let lut = _mm256_setr_epi8(
-        -128, 0, -128, 1, 3, 3, -128, 2, -128, -128, -128, -128, -128, -128, -128, -128,
-        -128, 0, -128, 1, 3, 3, -128, 2, -128, -128, -128, -128, -128, -128, -128, -128,
-    );
-
-    let mut i = 0;
-    while i + 32 <= seq.len() {
-        let ascii_chars = _mm256_loadu_si256(seq.as_ptr().add(i) as *const _);
-        let nibbles = _mm256_and_si256(ascii_chars, mask);
-        let translated = _mm256_shuffle_epi8(lut, nibbles);
-        _mm256_storeu_si256(out.as_mut_ptr().add(i) as *mut _, translated);
-        i += 32;
-    }
-
-    // Process remainder
-    vectorize_base_lookup_scalar(&seq[i..], &mut out[i..]);
-}
-
-#[cfg(target_arch = "aarch64")]
-#[target_feature(enable = "neon")]
-unsafe fn vectorize_base_lookup_neon(seq: &[u8], out: &mut [u8]) {
-    use std::arch::aarch64::*;
-
-    // 1. Bitmask for lower 4 bits
-    let mask = vdupq_n_u8(0x0F);
-
-    // 2. In-Register LUT (NEON uses unsigned u8, so 128 works perfectly)
-    let lut_data: [u8; 16] = [
-        128, 0, 128, 1, 3, 3, 128, 2, 128, 128, 128, 128, 128, 128, 128, 128
-    ];
-    let lut = vld1q_u8(lut_data.as_ptr());
-
-    let mut i = 0;
-
-    // Process 16 bases at a time
-    while i + 16 <= seq.len() {
-        let ascii_chars = vld1q_u8(seq.as_ptr().add(i));
-        let nibbles = vandq_u8(ascii_chars, mask);
-
-        // vqtbl1q_u8 is the ARM equivalent of _mm256_shuffle_epi8
-        let translated = vqtbl1q_u8(lut, nibbles);
-
-        vst1q_u8(out.as_mut_ptr().add(i), translated);
-        i += 16;
-    }
-
-    // Process remainder
-    vectorize_base_lookup_scalar(&seq[i..], &mut out[i..]);
-}
-
-
 /// Encodes an ASCII DNA sequence into 0, 1, 2, 3, or 128/131 (invalid).
-/// Uses SIMD where available and falls back to scalar.
-pub fn encode_sequence(seq: &[u8], b: &mut Vec<u8>) {
-    if seq.is_empty() {
-        b.clear();
-        return;
+pub fn encode_sequence(seq: &[u8], out: &mut Vec<u8>) {
+    for &c in seq {
+        if c == b'\n' || c == b'\r' { continue; }
+        out.push(match c & 0x0F {
+            1 => 0, 3 => 1, 4 | 5 => 3, 7 => 2, _ => 128,
+        });
     }
-
-    b.clear();
-    b.reserve(seq.len());
-    // Set length safely since we overwrite it entirely immediately
-    unsafe { b.set_len(seq.len()); }
-
-    vectorize_base_lookup(seq, b);
 }
 
 /// Only works to reverse complement already encoded in 0, 1, 2, 3, 128/131, string
