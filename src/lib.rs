@@ -584,20 +584,26 @@ pub fn get_anchors(
         }
     }
 
-    // Match ONCE outside the loop and pass the specialized hash/validation logic
-    match (k, stride) {
-        (9, 9)   => run(q_seq, y_index, bufs, 9, 9, |c| if is_invalid_k8_16::<9>(c) { Err(9) } else { Ok(hash_k_fast::<9>(c)) }),
-        (11, 11) => run(q_seq, y_index, bufs, 11, 11, |c| if is_invalid_k8_16::<11>(c) { Err(11) } else { Ok(hash_k_fast::<11>(c)) }),
-        (13, 13) => run(q_seq, y_index, bufs, 13, 13, |c| if is_invalid_k8_16::<13>(c) { Err(13) } else { Ok(hash_k_fast::<13>(c)) }),
-        (15, 15) => run(q_seq, y_index, bufs, 15, 15, |c| if is_invalid_k8_16::<15>(c) { Err(15) } else { Ok(hash_k_fast::<15>(c)) }),
+    match k {
+        9 => run(q_seq, y_index, bufs, 9, stride, |c| {
+            if is_invalid_k8_16::<9>(c) { Err(stride) } else { Ok(hash_k_fast::<9>(c)) }
+        }),
+        11 => run(q_seq, y_index, bufs, 11, stride, |c| {
+            if is_invalid_k8_16::<11>(c) { Err(stride) } else { Ok(hash_k_fast::<11>(c)) }
+        }),
+        13 => run(q_seq, y_index, bufs, 13, stride, |c| {
+            if is_invalid_k8_16::<13>(c) { Err(stride) } else { Ok(hash_k_fast::<13>(c)) }
+        }),
+        15 => run(q_seq, y_index, bufs, 15, stride, |c| {
+            if is_invalid_k8_16::<15>(c) { Err(stride) } else { Ok(hash_k_fast::<15>(c)) }
+        }),
         _ => run(q_seq, y_index, bufs, k, stride, |c| {
-            if let Some(bad_idx) = c.iter().position(|&val| val > 3) {
-                Err(stride.max(bad_idx + 1))
-            } else {
-                let mut h = 0u32;
-                for &val in c { h = (h << 2) | (val as u32); }
-                Ok(h)
+            let mut h = 0u32;
+            for &val in c {
+                if val > 3 { return Err(stride); }
+                h = (h << 2) | (val as u32);
             }
+            Ok(h)
         }),
     }
 }
