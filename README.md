@@ -1,4 +1,4 @@
-[![Rust](https://github.com/yunwilliamyu/alamem)](https://github.com/yunwilliamyu/alamem)
+[![Rust](https://github.com/yunwilliamyu/alamem/actions/workflows/rust.yml/badge.svg)](https://github.com/yunwilliamyu/alamem/actions/workflows/rust.yml)
 # alamem - Approximate Local Alignment via chained MEMs
 
 ## Introduction
