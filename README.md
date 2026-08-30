@@ -57,24 +57,26 @@ chmod +x alamem
 
 ## Quick start
 ```sh
-alamem reference_list.txt query.fna[.gz] out.txt
+alamem reference[.fna[.gz]|_list.txt] query.fna[.gz] out.txt
 
 # test, inserted a chunk of NZ_CP013494.1 randomly inside another sequence
 # output should show NZ_CP013494.1 between 2424 and 15275
-alamem test/test_seq.txt test/NZ_CP013494.1.fna test/test_alamem_out.txt
+cd test_files
+alamem NZ_CP013494.1.fna hidden_NZ_CP013494.1,2424,15275.fasta test_alamem_out.txt
 ```
 
-reference_list.txt should be a newline-delimited list of all genomes (gzipped is fine)
+Both the reference and the query can either be a single FASTA file or a newline-delimited list of paths to a collection of FASTA files (gzipped is fine).
 
-out.txt will be where results are written.
+out.txt will be where results are (over)written.
 
 Note that alamem is almost symmetric with respect to reference and query in terms of output, but you should have the query be the shorter sequence, so that indexing is fast. alamem is fast enough that we can just stream the much larger reference database.
 
 ## Output
-The output test/test_alamem_out.txt looks like:
+The output `test_files/test_alamem_out.txt` should be identical to the provided `test_files/output.txt`, which looks like:
 ```
 Reference	Query	R_Size	R_Start	R_End	Q_Size	Q_Start	Q_End	Strand	ANI	Score
-hidden_NZ_CP013494.1,2424,15275	NZ_CP013494.1	100000	2424	15275	742499	560168	573019	+	100.00	12851
+NZ_CP013494.1	hidden_NZ_CP013494.1,2424,15275	742499	560168	573019	100000	2424	15275	+	100.00	12851
+
 ```
 Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
 
