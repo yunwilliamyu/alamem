@@ -10,7 +10,8 @@ fn test_binary_file_output() {
     let mut cmd = Command::cargo_bin("alamem")
         .expect("Failed to find binary");
 
-    cmd.arg("test_files/NZ_CP013494.1.fna")
+    cmd.arg("-t").arg("1")
+       .arg("test_files/NZ_CP013494.1.fna")
        .arg("test_files/hidden_NZ_CP013494.1,2424,15275.fasta")
        .arg(output_path)
        .assert()
