@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BIN_NAME: alamem
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Unit tests. Runs the suite twice per architecture so that both the SIMD and
+  # the scalar paths in encode_sequence / reverse_complement are exercised.
+  # encode_tests compares SIMD output against a scalar reference, but only for
+  # whichever path the CPU dispatch actually selects.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Unit tests (${{ matrix.arch }}, ${{ matrix.isa }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,  os: ubuntu-latest,    isa: baseline, rustflags: "" }
+          - { arch: x86_64,  os: ubuntu-latest,    isa: native,   rustflags: "-C target-cpu=native" }
+          - { arch: aarch64, os: ubuntu-24.04-arm, isa: baseline, rustflags: "" }
+          - { arch: aarch64, os: ubuntu-24.04-arm, isa: native,   rustflags: "-C target-cpu=native" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.arch }}-${{ matrix.isa }}
+
+      - name: cargo test
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo test --release
+
+  # ---------------------------------------------------------------------------
+  # Release binaries. Each artifact runs the integration test with its own
+  # RUSTFLAGS, so the exact binary being shipped is checked against known-good
+  # output rather than a differently-configured build.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64-v3
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            rustflags: "-C target-cpu=x86-64-v3"
+
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            rustflags: ""
+
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            rustflags: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.name }}
+
+      # Validates this artifact's exact codegen against test_files/output.txt.
+      - name: Integration test
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo test --release --target ${{ matrix.target }}
+
+      - name: Build
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --profile dist --target ${{ matrix.target }}
+
+      - name: Verify static
+        run: |
+          BIN="target/${{ matrix.target }}/dist/${BIN_NAME}"
+          file "$BIN"
+          file "$BIN" | grep -q "statically linked" \
+            || { echo "::error::not statically linked"; exit 1; }
+          if ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable"; then
+            echo "::error::binary has dynamic dependencies"; exit 1
+          fi
+
+      - name: Package
+        run: |
+          BIN="target/${{ matrix.target }}/dist/${BIN_NAME}"
+          TAR="${BIN_NAME}-${{ github.ref_name }}-${{ matrix.name }}.tar.gz"
+          tar -czf "$TAR" -C "$(dirname "$BIN")" "${BIN_NAME}"
+          sha256sum "$TAR" > "$TAR.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            *.tar.gz
+            *.tar.gz.sha256
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Collect every artifact and attach to the GitHub release.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Downloads
+
+            All binaries are statically linked (musl) and have no runtime
+            dependencies. Download, `tar -xzf`, and run.
+
+            | File | For |
+            |------|-----|
+            | `linux-x86_64-v3` | Intel Haswell (2013+) / AMD Zen 3+ — **start here** |
+            | `linux-x86_64` | Older or unknown x86-64 CPUs |
+            | `linux-aarch64` | ARM64 (Graviton, Ampere, ARM servers) |
+
+            If `linux-x86_64-v3` exits with "Illegal instruction", your CPU
+            predates AVX2 — use `linux-x86_64` instead.
+
+            Verify downloads with `sha256sum -c <file>.sha256`.
