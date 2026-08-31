@@ -105,10 +105,8 @@ jobs:
         run: |
           BIN="target/${{ matrix.target }}/dist/${BIN_NAME}"
           file "$BIN"
-          file "$BIN" | grep -Eq "static-pie linked|statically linked" \
-            || { echo "::error::not statically linked"; exit 1; }
-          if ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable"; then
-            echo "::error::binary has dynamic dependencies"; exit 1
+          if readelf -l "$BIN" | grep -q "program interpreter"; then
+            echo "::error::binary has a dynamic interpreter"; exit 1
           fi
 
       - name: Package
