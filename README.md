@@ -53,17 +53,16 @@ We offer a pre-built statically compiled executable for x86-64 systems and ARM L
 
 For using the latest version of alamem on x86-64:
 ```sh
-curl -L https://github.com/yunwilliamyu/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz | tar xz
-./alamem -h
+curl -L https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64-v3.tar.gz | tar xz./alamem -h
 ```
 
 Or, if you are on ARM:
 ```sh
-curl -L https://github.com/yunwilliamyu/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-aarch64.tar.gz | tar xz
+curl -L https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem-linux-aarch64.tar.gz | tar xz
 ./alamem -h
 ```
 
-**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
+**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64-v3.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
 
 ## Quick start
 ```sh
