@@ -31,6 +31,7 @@ sudo snap install rustup --classic
 rustup default stable
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 ```
+2. A C compiler (e.g. GCC on Linux, Clang on Mac, etc.). `sudo apt install build-essential` will work on Debian/Ubuntu Linux based machines, while `xcode-select --install` will work on most modern Macs.
 
 Building takes around a minute (depending on # of cores).
 
