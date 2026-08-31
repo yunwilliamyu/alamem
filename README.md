@@ -53,13 +53,13 @@ We offer a pre-built statically compiled executable for x86-64 systems and ARM L
 
 For using the latest version of alamem on x86-64:
 ```sh
-curl -L https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz | tar xz
+curl -L https://github.com/yunwilliamyu/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz | tar xz
 ./alamem -h
 ```
 
 Or, if you are on ARM:
 ```sh
-curl -L https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-aarch64.tar.gz | tar xz
+curl -L https://github.com/yunwilliamyu/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-aarch64.tar.gz | tar xz
 ./alamem -h
 ```
 
