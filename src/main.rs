@@ -46,8 +46,8 @@ impl FlatChunk {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "medival_search")]
-struct MedivalSearchCli {
+#[command(name = "alamem")]
+struct AlamemCli {
     /// The streamed database. Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
     pub database: String,
     /// The indexed query file(s). Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
@@ -115,7 +115,7 @@ fn compute_chunk(
 
 
 fn main() {
-    let cli = MedivalSearchCli::parse();
+    let cli = AlamemCli::parse();
     eprintln!("{:#?}", cli);
 
     let x_files = resolve_input(&cli.database);
