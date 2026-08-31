@@ -60,21 +60,53 @@ pub struct AlignConfig {
 // The global, thread-safe container for your runtime configuration
 pub static CONFIG: OnceLock<AlignConfig> = OnceLock::new();
 
-/// Encodes an ASCII DNA sequence into 0, 1, 2, 3, or 128/131 (invalid).
-pub fn encode_sequence(seq: &[u8], out: &mut Vec<u8>) {
-    for &c in seq {
-        if c == b'\n' || c == b'\r' { continue; }
-        out.push(match c & 0x0F {
-            1 => 0, 3 => 1, 4 | 5 => 3, 7 => 2, _ => 128,
-        });
-    }
-}
+
 
 /// Only works to reverse complement already encoded in 0, 1, 2, 3, 128/131, string
+/*
 #[inline]
 pub fn reverse_complement(encoded_fwd: &[u8], encoded_rev: &mut Vec<u8>) {
     encoded_rev.clear();
     encoded_rev.extend(encoded_fwd.iter().rev().map(|&byte| byte ^ 3));
+}*/
+// Claude vectorization below of reverse_complement
+pub fn reverse_complement(fwd: &[u8], rev: &mut Vec<u8>) {
+    rev.clear();
+    rev.reserve(fwd.len());
+    let n = fwd.len();
+    unsafe {
+        let dst = rev.as_mut_ptr();
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("avx2") {
+                revcomp_avx2(fwd, dst);
+                rev.set_len(n);
+                return;
+            }
+        }
+        for i in 0..n { *dst.add(i) = *fwd.get_unchecked(n - 1 - i) ^ 3; }
+        rev.set_len(n);
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn revcomp_avx2(src: &[u8], dst: *mut u8) {
+    use std::arch::x86_64::*;
+    let n = src.len();
+    let rev16 = _mm256_setr_epi8(15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,
+                                 15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0);
+    let three = _mm256_set1_epi8(3);
+    let mut i = 0;
+    while i + 32 <= n {
+        let v = _mm256_loadu_si256(src.as_ptr().add(n - 32 - i) as *const __m256i);
+        let v = _mm256_xor_si256(v, three);
+        let v = _mm256_shuffle_epi8(v, rev16);          // reverse within each lane
+        let v = _mm256_permute2x128_si256(v, v, 0x01);  // swap the lanes
+        _mm256_storeu_si256(dst.add(i) as *mut __m256i, v);
+        i += 32;
+    }
+    while i < n { *dst.add(i) = *src.get_unchecked(n - 1 - i) ^ 3; i += 1; }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -121,7 +153,7 @@ pub struct MEM {
 // Pooling buffers to completely eliminate millions of inner-loop allocations
 #[repr(align(64))]
 pub struct ThreadBuffers {
-    pub encoded_fwd: Vec<u8>,
+//    pub encoded_fwd: Vec<u8>,
     pub encoded_rev: Vec<u8>,
     pub anchors_fwd: Vec<Anchor>,
     pub anchors_rev: Vec<Anchor>,
@@ -137,7 +169,7 @@ pub struct ThreadBuffers {
 impl ThreadBuffers {
     pub fn new() -> Self {
         Self {
-            encoded_fwd: Vec::with_capacity(1024 * 1024),
+            //encoded_fwd: Vec::with_capacity(1024 * 1024),
             encoded_rev: Vec::with_capacity(1024 * 1024),
             anchors_fwd: Vec::with_capacity(1024),
             anchors_rev: Vec::with_capacity(1024),
@@ -496,6 +528,42 @@ pub fn get_anchors(
     }
 }
 
+/// Anchors are in monotone q_pos order. Drops those with no possible chain partner.
+fn prune_isolated_anchors(
+    anchors: &mut Vec<Anchor>,
+    keep: &mut Vec<bool>,
+    diag_win: i64,
+    window: u32,
+) {
+    let n = anchors.len();
+    keep.clear();
+    keep.resize(n, false);
+
+    let mut lo = 0usize;
+    for i in 0..n {
+        let ai = anchors[i];
+        while lo < i && anchors[lo].q_pos.abs_diff(ai.q_pos) > window { lo += 1; }
+
+        if i - lo > 64 {                       // dense repeat: don't go quadratic
+            for j in lo..=i { keep[j] = true; }
+            continue;
+        }
+        for j in lo..i {
+            let aj = anchors[j];
+            if aj.t_id == ai.t_id && (aj.diag - ai.diag).abs() <= diag_win {
+                keep[i] = true;
+                keep[j] = true;
+            }
+        }
+    }
+
+    let mut w = 0;
+    for i in 0..n {
+        if keep[i] { anchors[w] = anchors[i]; w += 1; }
+    }
+    anchors.truncate(w);
+}
+
 pub fn align_strand(
     q_seq: &[u8],
     strand: char,
@@ -506,15 +574,23 @@ pub fn align_strand(
     let q_size: usize = q_seq.len();
 
     let is_fwd = strand == '+';
+    let slot = if is_fwd { &mut bufs.anchors_fwd } else { &mut bufs.anchors_rev };
 
-    let mut anchors = if is_fwd {
-        std::mem::take(&mut bufs.anchors_fwd)
-    } else {
-        std::mem::take(&mut bufs.anchors_rev)
-    };
+    if slot.is_empty() { return; }
 
-    if anchors.is_empty() {
-        return;
+    let mut anchors = std::mem::take(slot);
+
+    let k = config.kmer_size;
+    let stride = config.stride.unwrap_or(k);
+    // Guard: needs >= 2 stride positions inside a min_len MEM for the argument to hold.
+    if config.min_len >= 2 * stride + k {
+        let diag_win = (config.max_chain_gap + config.min_len) as i64;
+        let window = (config.max_chain_gap + config.min_len + stride + k) as u32;
+        prune_isolated_anchors(&mut anchors, &mut bufs.used, diag_win, window);
+        if anchors.is_empty() {
+            if is_fwd { bufs.anchors_fwd = anchors; } else { bufs.anchors_rev = anchors; }
+            return;
+        }
     }
 
     anchors.sort_unstable_by_key(|a| (a.t_id, a.diag, a.q_pos));
@@ -585,6 +661,49 @@ pub fn align_strand(
             }
 
             i = j;
+        }
+
+        // --- prefilter: drop MEMs that can neither reach min_len alone nor chain ---
+        {
+            let n = bufs.mems.len();
+            if n == 0 { continue; }
+
+            let max_gap = config.max_chain_gap as i64;
+            let min_len = config.min_len as i32;
+
+            let (mems, keep) = (&mut bufs.mems, &mut bufs.used);
+            keep.clear();
+            keep.resize(n, false);
+
+            let (mut lo, mut hi) = (0usize, 0usize);
+            for idx in 0..n {
+                let mi = mems[idx];
+                if mi.len >= min_len { keep[idx] = true; continue; }
+
+                while mems[lo].diag < mi.diag - max_gap { lo += 1; }
+                while hi < n && mems[hi].diag <= mi.diag + max_gap { hi += 1; }
+
+                if hi - lo > 64 { keep[idx] = true; continue; }   // repeat guard
+
+                for j in lo..hi {
+                    if j == idx { continue; }
+                    let mj = mems[j];
+                    let (a, b) = if mj.q_start <= mi.q_start { (mj, mi) } else { (mi, mj) };
+                    if b.q_start - a.q_end <= config.max_chain_gap as i32
+                        && b.t_start - a.t_end <= config.max_chain_gap as i32
+                        {
+                            keep[idx] = true;
+                            break;
+                        }
+                }
+            }
+
+            let mut w = 0;
+            for idx in 0..n {
+                if keep[idx] { mems[w] = mems[idx]; w += 1; }
+            }
+            mems.truncate(w);
+            if w == 0 { continue; }
         }
 
         //bufs.mems.sort_unstable_by_key(|h: &MEM| (h.t_start, h.q_start));
@@ -671,7 +790,10 @@ pub fn align_strand(
             }
         }
 
-        bufs.order.clear(); bufs.order.extend(0..n);
+        let min_len = config.min_len as i32;
+        bufs.order.clear();
+        bufs.order.extend((0..n).filter(|&i| bufs.scores[i] >= min_len));
+        if bufs.order.is_empty() { continue; }
         bufs.order.sort_unstable_by_key(|&idx| std::cmp::Reverse(bufs.scores[idx]));
         bufs.used.clear(); bufs.used.resize(n, false);
 
@@ -778,10 +900,12 @@ pub fn align_strand(
 pub fn process_query_sequence(
     y_index: &YIndex,
     bufs: &mut ThreadBuffers,
+    q_seq_fwd: &[u8],
 ) {
     bufs.hits.clear();
 
-    let q_seq_fwd = std::mem::take(&mut bufs.encoded_fwd);
+    reverse_complement(&q_seq_fwd, &mut bufs.encoded_rev);
+
     let q_seq_rev = std::mem::take(&mut bufs.encoded_rev);
 
     // Process forward strand
@@ -799,7 +923,6 @@ pub fn process_query_sequence(
         hit.q_end = q_len.saturating_sub(orig_q_start);
     }
 
-    bufs.encoded_fwd = q_seq_fwd;
     bufs.encoded_rev = q_seq_rev;
 }
 
@@ -861,6 +984,393 @@ pub fn filter_overlapping_hits(hits: &mut Vec<Hit>) {
     }
 
     hits.truncate(filtered_count);
+}
+
+// I had Claude write a vectorized version of this. See below.
+// Encodes an ASCII DNA sequence into 0, 1, 2, 3, or 128/131 (invalid).
+/*
+ pub fn encode_sequence(seq: &[u8], out: &mut Vec<u8>) {
+ for &c in seq {
+     if c == b'\n' || c == b'\r' { continue; }
+     out.push(match c & 0x0F {
+     1 => 0, 3 => 1, 4 | 5 => 3, 7 => 2, _ => 128,
+});
+}
+}
+*/
+
+
+// Claude's version of encode_sequence
+// Vectorized ASCII -> 2-bit encoding with inline newline stripping.
+//
+// Translation is unchanged from the original pshufb/vqtbl1q approach: the low
+// nibble of each ASCII byte indexes a 16-entry LUT. The only addition is that
+// '\n' and '\r' bytes are compacted out of the output, so records can be fed
+// straight from needletail's `raw_seq()` (borrowed, no allocation) instead of
+// `seq()` (which splices line-wrapped records into a fresh Vec).
+//
+// NOTE: output length no longer equals input length. `encode_sequence` appends
+// and does not clear `out` -- matching the caller sites, which clear first.
+
+//use std::arch::x86_64::*; // see cfg-gated fns below; this import is illustrative
+
+/// Low-nibble lookup: A=0, C=1, G=2, T/U=3, anything else = 128 (invalid).
+const LUT16: [u8; 16] = [
+    128, 0, 128, 1, 3, 3, 128, 2, 128, 128, 128, 128, 128, 128, 128, 128,
+];
+
+/// Byte-compaction shuffle table, indexed by an 8-bit *delete* mask.
+/// Entry `m` gives the source indices of the bytes to keep, packed to the front.
+/// Unused trailing slots are 0x80, which yields 0 for both `pshufb` and
+/// `vqtbl1_u8` -- harmless, since we only ever store `8 - popcount(m)` bytes.
+const fn build_compact_table() -> [u8; 256 * 8] {
+    let mut t = [0u8; 256 * 8];
+    let mut m = 0usize;
+    while m < 256 {
+        let mut src = 0usize;
+        let mut dst = 0usize;
+        while src < 8 {
+            if (m >> src) & 1 == 0 {
+                t[m * 8 + dst] = src as u8;
+                dst += 1;
+            }
+            src += 1;
+        }
+        while dst < 8 {
+            t[m * 8 + dst] = 0x80;
+            dst += 1;
+        }
+        m += 1;
+    }
+    t
+}
+
+static COMPACT: [u8; 2048] = build_compact_table();
+
+/// Bytes of output slack the SIMD paths may write past the true end.
+/// The 8-byte `storel`/`vst1_u8` in the compaction path can overshoot by 8;
+/// 32 gives comfortable margin for the widest store.
+const SLACK: usize = 32;
+
+// ---------------------------------------------------------------- public API
+
+/// Encodes an ASCII DNA sequence into 0, 1, 2, 3, or 128 (invalid),
+/// stripping '\n' and '\r'. Appends to `out`; does not clear it.
+pub fn encode_sequence(seq: &[u8], out: &mut Vec<u8>) {
+    if seq.is_empty() {
+        return;
+    }
+
+    let start = out.len();
+    // Reserve worst case (no newlines) plus slack for overshooting stores.
+    out.reserve(seq.len() + SLACK);
+
+    let written = unsafe {
+        let dst = out.as_mut_ptr().add(start);
+        encode_dispatch(seq, dst)
+    };
+
+    debug_assert!(written <= seq.len());
+    unsafe { out.set_len(start + written) };
+}
+
+/// # Safety
+/// `dst` must be valid for writes of `seq.len() + SLACK` bytes.
+#[inline]
+unsafe fn encode_dispatch(seq: &[u8], dst: *mut u8) -> usize {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return encode_avx2(seq, dst);
+        }
+        if is_x86_feature_detected!("ssse3") {
+            return encode_ssse3(seq, dst);
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            return encode_neon(seq, dst);
+        }
+    }
+
+    encode_scalar(seq, dst)
+}
+
+// ------------------------------------------------------------------- scalar
+
+/// # Safety
+/// `dst` must be valid for writes of `seq.len()` bytes.
+#[inline]
+unsafe fn encode_scalar(seq: &[u8], dst: *mut u8) -> usize {
+    let mut d = 0usize;
+    for &c in seq {
+        if c == b'\n' || c == b'\r' {
+            continue;
+        }
+        *dst.add(d) = *LUT16.get_unchecked((c & 0x0F) as usize);
+        d += 1;
+    }
+    d
+}
+
+// -------------------------------------------------------------------- x86
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_impl {
+    use super::{encode_scalar, COMPACT, LUT16};
+
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    #[inline(always)]
+    unsafe fn lut128() -> __m128i {
+        _mm_loadu_si128(LUT16.as_ptr() as *const __m128i)
+    }
+
+    /// Compacts one 128-bit translated vector, deleting lanes flagged in `del`
+    /// (low 16 bits). Returns bytes written. Splits into two 8-byte halves so
+    /// the shuffle table stays 2 KB instead of 1 MB.
+    ///
+    /// # Safety
+    /// `dst` must be valid for 16 bytes of writes.
+    #[inline(always)]
+    unsafe fn compact16(v: __m128i, del: u32, dst: *mut u8) -> usize {
+        let lo_m = (del & 0xFF) as usize;
+        let hi_m = ((del >> 8) & 0xFF) as usize;
+
+        // Low half: table load zero-extends, so lanes 8..15 of the control are
+        // 0 -- irrelevant because we store only 8 bytes.
+        let ctrl_lo = _mm_loadl_epi64(COMPACT.as_ptr().add(lo_m * 8) as *const __m128i);
+        _mm_storel_epi64(dst as *mut __m128i, _mm_shuffle_epi8(v, ctrl_lo));
+        let n_lo = 8 - (lo_m as u32).count_ones() as usize;
+
+        // High half: shift the upper 8 bytes down, then compact identically.
+        let ctrl_hi = _mm_loadl_epi64(COMPACT.as_ptr().add(hi_m * 8) as *const __m128i);
+        let v_hi = _mm_srli_si128(v, 8);
+        _mm_storel_epi64(dst.add(n_lo) as *mut __m128i, _mm_shuffle_epi8(v_hi, ctrl_hi));
+        let n_hi = 8 - (hi_m as u32).count_ones() as usize;
+
+        n_lo + n_hi
+    }
+
+    /// # Safety
+    /// `dst` must be valid for `seq.len() + 32` bytes. Requires SSSE3.
+    #[target_feature(enable = "ssse3")]
+    pub unsafe fn encode_ssse3(seq: &[u8], dst: *mut u8) -> usize {
+        let lut = lut128();
+        let nib = _mm_set1_epi8(0x0F);
+        let lf = _mm_set1_epi8(b'\n' as i8);
+        let cr = _mm_set1_epi8(b'\r' as i8);
+
+        let (mut s, mut d) = (0usize, 0usize);
+        while s + 16 <= seq.len() {
+            let v = _mm_loadu_si128(seq.as_ptr().add(s) as *const __m128i);
+            let t = _mm_shuffle_epi8(lut, _mm_and_si128(v, nib));
+
+            let del = _mm_or_si128(_mm_cmpeq_epi8(v, lf), _mm_cmpeq_epi8(v, cr));
+            let m = _mm_movemask_epi8(del) as u32;
+
+            if m == 0 {
+                _mm_storeu_si128(dst.add(d) as *mut __m128i, t);
+                d += 16;
+            } else {
+                d += compact16(t, m, dst.add(d));
+            }
+            s += 16;
+        }
+
+        d + encode_scalar(&seq[s..], dst.add(d))
+    }
+
+    /// # Safety
+    /// `dst` must be valid for `seq.len() + 32` bytes. Requires AVX2.
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn encode_avx2(seq: &[u8], dst: *mut u8) -> usize {
+        // 16-entry LUT duplicated into both 128-bit lanes.
+        let lut = _mm256_broadcastsi128_si256(lut128());
+        let nib = _mm256_set1_epi8(0x0F);
+        let lf = _mm256_set1_epi8(b'\n' as i8);
+        let cr = _mm256_set1_epi8(b'\r' as i8);
+
+        let (mut s, mut d) = (0usize, 0usize);
+        while s + 32 <= seq.len() {
+            let v = _mm256_loadu_si256(seq.as_ptr().add(s) as *const __m256i);
+
+            // Translation: identical to the original, newlines land on 128.
+            let t = _mm256_shuffle_epi8(lut, _mm256_and_si256(v, nib));
+
+            let del = _mm256_or_si256(_mm256_cmpeq_epi8(v, lf), _mm256_cmpeq_epi8(v, cr));
+            let m = _mm256_movemask_epi8(del) as u32;
+
+            if m == 0 {
+                // Fast path: byte-identical to the original store.
+                _mm256_storeu_si256(dst.add(d) as *mut __m256i, t);
+                d += 32;
+            } else {
+                // vpshufb is lane-local, so compact each 128-bit half.
+                let n0 = compact16(_mm256_castsi256_si128(t), m & 0xFFFF, dst.add(d));
+                d += n0;
+                let n1 = compact16(_mm256_extracti128_si256(t, 1), m >> 16, dst.add(d));
+                d += n1;
+            }
+            s += 32;
+        }
+
+        d + encode_scalar(&seq[s..], dst.add(d))
+    }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+use x86_impl::{encode_avx2, encode_ssse3};
+
+// ------------------------------------------------------------------- aarch64
+
+#[cfg(target_arch = "aarch64")]
+mod neon_impl {
+    use super::{encode_scalar, COMPACT, LUT16};
+    use std::arch::aarch64::*;
+
+    /// Bit weights for deriving an 8-bit mask per half-register.
+    const BITS: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
+
+    /// # Safety
+    /// `dst` must be valid for `seq.len() + 32` bytes. Requires NEON.
+    #[target_feature(enable = "neon")]
+    pub unsafe fn encode_neon(seq: &[u8], dst: *mut u8) -> usize {
+        let lut = vld1q_u8(LUT16.as_ptr());
+        let nib = vdupq_n_u8(0x0F);
+        let lf = vdupq_n_u8(b'\n');
+        let cr = vdupq_n_u8(b'\r');
+        let bits = vld1q_u8(BITS.as_ptr());
+
+        let (mut s, mut d) = (0usize, 0usize);
+        while s + 16 <= seq.len() {
+            let v = vld1q_u8(seq.as_ptr().add(s));
+            let t = vqtbl1q_u8(lut, vandq_u8(v, nib));
+
+            let del = vorrq_u8(vceqq_u8(v, lf), vceqq_u8(v, cr));
+
+            // NEON has no movemask; AND with bit weights, then horizontal-add
+            // each half. Max sum is 1+2+...+128 = 255, so u8 is exact.
+            let weighted = vandq_u8(del, bits);
+            let lo_m = vaddv_u8(vget_low_u8(weighted)) as usize;
+            let hi_m = vaddv_u8(vget_high_u8(weighted)) as usize;
+
+            if (lo_m | hi_m) == 0 {
+                vst1q_u8(dst.add(d), t);
+                d += 16;
+            } else {
+                let ctrl_lo = vld1_u8(COMPACT.as_ptr().add(lo_m * 8));
+                vst1_u8(dst.add(d), vqtbl1_u8(t, ctrl_lo));
+                let n_lo = 8 - (lo_m as u32).count_ones() as usize;
+
+                let t_hi = vextq_u8(t, t, 8);
+                let ctrl_hi = vld1_u8(COMPACT.as_ptr().add(hi_m * 8));
+                vst1_u8(dst.add(d + n_lo), vqtbl1_u8(t_hi, ctrl_hi));
+                let n_hi = 8 - (hi_m as u32).count_ones() as usize;
+
+                d += n_lo + n_hi;
+            }
+            s += 16;
+        }
+
+        d + encode_scalar(&seq[s..], dst.add(d))
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+use neon_impl::encode_neon;
+
+// --------------------------------------------------------------------- tests
+
+#[cfg(test)]
+mod encode_tests {
+    use super::*;
+
+    /// Independent reference implementation.
+    fn reference(seq: &[u8]) -> Vec<u8> {
+        seq.iter()
+        .filter(|&&c| c != b'\n' && c != b'\r')
+        .map(|&c| LUT16[(c & 0x0F) as usize])
+        .collect()
+    }
+
+    fn check(input: &[u8]) {
+        let mut out = Vec::new();
+        encode_sequence(input, &mut out);
+        assert_eq!(out, reference(input), "mismatch on {:?}", String::from_utf8_lossy(input));
+    }
+
+    #[test]
+    fn basic_alphabet() {
+        check(b"ACGTUacgtuN");
+    }
+
+    #[test]
+    fn no_newlines_matches_original() {
+        check(&b"ACGTACGTACGTACGT".repeat(8));
+    }
+
+    #[test]
+    fn wrapped_60_and_80() {
+        for w in [60usize, 70, 80] {
+            let mut s = Vec::new();
+            for _ in 0..7 {
+                s.extend(b"ACGTN".iter().cycle().take(w));
+                s.push(b'\n');
+            }
+            check(&s);
+        }
+    }
+
+    #[test]
+    fn crlf() {
+        let mut s = Vec::new();
+        for _ in 0..5 {
+            s.extend(b"ACGTACGTAC".iter().cycle().take(60));
+            s.extend_from_slice(b"\r\n");
+        }
+        check(&s);
+    }
+
+    #[test]
+    fn every_length_and_offset() {
+        // Exercises tails, partial vectors, and newlines at every lane position.
+        let base: Vec<u8> = b"ACGTNacgtn".iter().cycle().take(200).copied().collect();
+        for len in 0..200 {
+            for nl_at in 0..len.max(1) {
+                let mut s = base[..len].to_vec();
+                if len > 0 {
+                    s[nl_at] = b'\n';
+                }
+                check(&s);
+            }
+        }
+    }
+
+    #[test]
+    fn all_newlines() {
+        check(&b"\n".repeat(100));
+        check(&b"\r\n".repeat(64));
+    }
+
+    #[test]
+    fn appends_without_clearing() {
+        let mut out = vec![9, 9];
+        encode_sequence(b"AC\nGT", &mut out);
+        assert_eq!(out, vec![9, 9, 0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn empty() {
+        let mut out = Vec::new();
+        encode_sequence(b"", &mut out);
+        assert!(out.is_empty());
+    }
 }
 
 
@@ -1112,8 +1622,8 @@ mod pipeline_tests {
         let mut bufs = ThreadBuffers::new();
 
         // Query (Forward): 10 bases [A, A, A, A, A, A, A, A, A, C]
-        bufs.encoded_fwd = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-        reverse_complement(&bufs.encoded_fwd, &mut bufs.encoded_rev);
+        let encoded_fwd = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        reverse_complement(&encoded_fwd, &mut bufs.encoded_rev);
 
         // Target (9 T's): 2-bit hash is 0x3FFFF, but canonical hash min(fwd, rev) is 0.
         // Target is reverse relative to canonical 0, so is_rev = true (bit 31 set).
@@ -1121,7 +1631,7 @@ mod pipeline_tests {
         let canonical_hash = 0;
         let y_index = create_mock_index(t_seq, canonical_hash, true);
 
-        process_query_sequence(&y_index, &mut bufs);
+        process_query_sequence(&y_index, &mut bufs, &encoded_fwd);
 
         // Verify reverse strand coordinate conversion back to forward query space
         assert_eq!(bufs.hits.len(), 1);

@@ -14,7 +14,6 @@ use alamem::{YIndex,
     process_query_sequence,
     filter_overlapping_hits,
     encode_sequence,
-    reverse_complement,
     AlignConfig, CONFIG,
     ThreadBuffers
 };
@@ -33,6 +32,7 @@ fn resolve_input(path: &str) -> Vec<String> {
 pub struct FlatChunk {
     pub memory: Vec<u8>,
     pub bounds: Vec<(usize, usize, usize, usize)>,
+    pub raw_bytes: usize,
 }
 
 impl FlatChunk {
@@ -40,6 +40,7 @@ impl FlatChunk {
         Self {
             memory: Vec::with_capacity(byte_capacity),
             bounds: Vec::with_capacity(item_capacity),
+            raw_bytes: 0,
         }
     }
 }
@@ -74,18 +75,14 @@ fn compute_chunk(
     recycle_tx: &crossbeam::channel::Sender<FlatChunk>,
 ) {
     let chunk_len = chunk.bounds.len();
-    let chunk_bytes = chunk.memory.len();
+    let raw_bytes = chunk.raw_bytes;
+    //let chunk_bytes = chunk.memory.len();
 
     for &(id_start, id_end, seq_start, seq_end) in &chunk.bounds {
         let id = &chunk.memory[id_start..id_end];
-        let raw_seq = &chunk.memory[seq_start..seq_end];
+        let q_fwd = &chunk.memory[seq_start..seq_end];
 
-        thread_bufs.encoded_fwd.clear();
-        thread_bufs.encoded_rev.clear();
-        encode_sequence(&raw_seq, &mut thread_bufs.encoded_fwd);
-        reverse_complement(&thread_bufs.encoded_fwd, &mut thread_bufs.encoded_rev);
-
-        process_query_sequence(y_index, thread_bufs);
+        process_query_sequence(y_index, thread_bufs, &q_fwd);
         filter_overlapping_hits(&mut thread_bufs.hits);
 
         if thread_bufs.hits.is_empty() { continue; }
@@ -107,11 +104,12 @@ fn compute_chunk(
         }
     }
 
-    if is_single_file { pb_main.inc(chunk_bytes as u64); }
+    if is_single_file { pb_main.inc(raw_bytes as u64); }
     pb_seqs.inc(chunk_len as u64);
 
     chunk.memory.clear();
     chunk.bounds.clear();
+    chunk.raw_bytes = 0;
     recycle_tx.send(chunk).ok();
 }
 
@@ -238,10 +236,12 @@ fn main() {
 
                 let seq_slice = rec.raw_seq();
                 let seq_start = chunk.memory.len();
-                chunk.memory.extend_from_slice(&seq_slice);
+                encode_sequence(&seq_slice, &mut chunk.memory);
                 let seq_end = chunk.memory.len();
 
                 chunk.bounds.push((id_start, id_end, seq_start, seq_end));
+
+                chunk.raw_bytes += id_slice.len() + seq_slice.len() + 3;
 
                 if chunk.bounds.len() >= MAX_SEQ || chunk.memory.len() >= MAX_BYTES {
                     let full_chunk = std::mem::replace(&mut chunk, get_chunk());

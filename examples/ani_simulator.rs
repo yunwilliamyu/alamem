@@ -1,5 +1,5 @@
 use alamem::{
-    filter_overlapping_hits, process_query_sequence, reverse_complement, AlignConfig, ThreadBuffers,
+    filter_overlapping_hits, process_query_sequence, AlignConfig, ThreadBuffers,
     YIndex, CONFIG,
 };
 use std::time::Instant;
@@ -64,7 +64,10 @@ fn main() {
     println!("\nSimulating {} reads (Len: {}, Target ANI: {}%)...", num_reads, read_len, target_ani);
 
     let mut thread_bufs = ThreadBuffers::new();
+    let mut encoded_fwd = Vec::with_capacity(1024 * 1024);
     for i in 0..num_reads {
+        encoded_fwd.clear();
+
         // 1. Pick a random sequence and position
         let seq_idx = (rng.next_u64() as usize) % y_index.seq_data.len();
         let seq = &y_index.seq_data[seq_idx];
@@ -75,8 +78,7 @@ fn main() {
 
         // 2. Mutate sequence and build a cumulative history for Local ANI tracking
         //let mut mutated_fwd = Vec::with_capacity(read_len + (read_len / 10));
-        thread_bufs.encoded_fwd.clear();
-        thread_bufs.encoded_rev.clear();
+
 
         let mut cum_matches = Vec::with_capacity(read_len + (read_len / 10) + 1);
         let mut cum_ref = Vec::with_capacity(read_len + (read_len / 10) + 1);
@@ -89,7 +91,7 @@ fn main() {
 
         for &base in original_subseq {
             if base > 3 { // N or other ambiguous base
-                thread_bufs.encoded_fwd.push(base);
+                encoded_fwd.push(base);
                 current_ref += 1;
                 cum_matches.push(current_matches);
                 cum_ref.push(current_ref);
@@ -102,7 +104,7 @@ fn main() {
                     // SNP (Substitution)
                     let mut new_base = (rng.next_u64() % 4) as u8;
                     if new_base == base { new_base = (base + 1) % 4; }
-                    thread_bufs.encoded_fwd.push(new_base);
+                    encoded_fwd.push(new_base);
                     current_ref += 1;
                     cum_matches.push(current_matches);
                     cum_ref.push(current_ref);
@@ -111,11 +113,11 @@ fn main() {
                     current_ref += 1;
                 } else {
                     // Insertion
-                    thread_bufs.encoded_fwd.push((rng.next_u64() % 4) as u8);
+                    encoded_fwd.push((rng.next_u64() % 4) as u8);
                     cum_matches.push(current_matches);
                     cum_ref.push(current_ref);
 
-                    thread_bufs.encoded_fwd.push(base);
+                    encoded_fwd.push(base);
                     current_matches += 1;
                     current_ref += 1;
                     cum_matches.push(current_matches);
@@ -123,7 +125,7 @@ fn main() {
                 }
             } else {
                 // Match
-                thread_bufs.encoded_fwd.push(base);
+                encoded_fwd.push(base);
                 current_matches += 1;
                 current_ref += 1;
                 cum_matches.push(current_matches);
@@ -131,11 +133,8 @@ fn main() {
             }
         }
 
-        // 3. Prepare reverse complement
-        reverse_complement(&thread_bufs.encoded_fwd, &mut thread_bufs.encoded_rev);
-
         // 4. Align
-        process_query_sequence(&y_index, &mut thread_bufs);
+        process_query_sequence(&y_index, &mut thread_bufs, &encoded_fwd);
         filter_overlapping_hits(&mut thread_bufs.hits);
 
         // 5. Evaluate Accuracy against True Local Origin
