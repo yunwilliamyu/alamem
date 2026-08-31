@@ -63,7 +63,7 @@ curl -L https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem-l
 ./alamem -h
 ```
 
-**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64-v3.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
+**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
 
 ## Quick start
 ```sh
