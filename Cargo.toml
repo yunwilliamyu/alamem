@@ -28,6 +28,7 @@ debug = false
 [profile.dist]
 inherits = "release"
 panic = "abort"
+strip = true
 
 [profile.profiling]
 inherits = "release"
