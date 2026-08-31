@@ -88,7 +88,13 @@ jobs:
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo test --release --target ${{ matrix.target }}
-
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          TRIPLE=$(echo "${{ matrix.target }}" | tr '-' '_')
+          echo "CC_${TRIPLE}=musl-gcc" >> "$GITHUB_ENV"
+          echo "AR_${TRIPLE}=ar" >> "$GITHUB_ENV"
       - name: Build
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
