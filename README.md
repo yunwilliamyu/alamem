@@ -48,16 +48,22 @@ conda install -c bioconda skani
 ```
 -->
 
-#### Option 2: Pre-built x86-64 linux statically compiled executable
-We offer a pre-built statically compiled executable for x86-64 systems. That is, if you're on an x86-64 Linux system, you can just download the binary and run it without installing anything.
+#### Option 2: Pre-built x86-64 or ARM Linux statically compiled executable
+We offer a pre-built statically compiled executable for x86-64 systems and ARM Linux. That is, if you're on an x86-64 or ARM Linux system, you can just download the appropriate binary and run it without installing anything.
 
-For using the latest version of alamem:
+For using the latest version of alamem on x86-64:
 ```sh
-wget https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem
-chmod +x alamem
+curl -L https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz | tar xz
 ./alamem -h
 ```
-**Important**: the binary is slower by about 20% on uncompressed FASTA databases, and up to 50% on gzipped FASTA databases. It is here for convenience, but we recommend compiling for your architecture using Option 1---we put in a lot of architecture specific optimizations (e.g. SIMD) that the statically compiled executable for all x86-64 systems lacks.
+
+Or, if you are on ARM:
+```sh
+curl -L https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-aarch64.tar.gz | tar xz
+./alamem -h
+```
+
+**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<you>/alamem/releases/download/v0.1.2/alamem-v0.1.2-linux-x86_64-v3.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
 
 ## Quick start
 ```sh
