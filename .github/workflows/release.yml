@@ -105,7 +105,7 @@ jobs:
         run: |
           BIN="target/${{ matrix.target }}/dist/${BIN_NAME}"
           file "$BIN"
-          file "$BIN" | grep -q "statically linked" \
+          file "$BIN" | grep -Eq "static-pie linked|statically linked" \
             || { echo "::error::not statically linked"; exit 1; }
           if ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable"; then
             echo "::error::binary has dynamic dependencies"; exit 1
