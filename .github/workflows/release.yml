@@ -83,11 +83,6 @@ jobs:
         with:
           key: build-${{ matrix.name }}
 
-      # Validates this artifact's exact codegen against test_files/output.txt.
-      - name: Integration test
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo test --release --target ${{ matrix.target }}
       - name: Install musl toolchain
         run: |
           sudo apt-get update
@@ -95,6 +90,12 @@ jobs:
           TRIPLE=$(echo "${{ matrix.target }}" | tr '-' '_')
           echo "CC_${TRIPLE}=musl-gcc" >> "$GITHUB_ENV"
           echo "AR_${TRIPLE}=ar" >> "$GITHUB_ENV"
+      # Validates this artifact's exact codegen against test_files/output.txt.
+      - name: Integration test
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo test --release --target ${{ matrix.target }}
+
       - name: Build
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
