@@ -85,9 +85,22 @@ Note that alamem is almost symmetric with respect to reference and query in term
 ## Output
 The output `test_files/test_alamem_out.txt` should be identical to the provided `test_files/output.txt`, which looks like:
 ```
-Reference	Query	R_Size	R_Start	R_End	Q_Size	Q_Start	Q_End	Strand	ANI	Score
-NZ_CP013494.1	hidden_NZ_CP013494.1,2424,15275	742499	560168	573019	100000	2424	15275	+	100.00	12851
-
+# ALAMEM START
+# Version: 0.1.2
+# Options:
+# database: "NZ_CP013494.1.fna"
+# y_files: "hidden_NZ_CP013494.1,2424,15275.fasta"
+# output_path: "output.txt"
+# threads: 0
+# kmer_size: 13
+# stride: None
+# min_ani: 90.0
+# min_len: 40
+# max_seed_multiplicity: 1000000
+# max_chain_gap: 100
+Reference       Query   R_Size  R_Start R_End   Q_Size  Q_Start Q_End   Strand  ANI     Score
+NZ_CP013494.1   hidden_NZ_CP013494.1,2424,15275 742499  560168  573019  100000  2424    15275   +  100.00  12851
+# ALAMEM END: Run completed successfully
 ```
 Notice that we are using the sequence ID, rather than the FASTA file name, so if you have multiple sequences within a reference file, the sequences will show up separately. Per convention, the sequence ID is everything after '>' and before whitespace.
 
