@@ -137,7 +137,7 @@ fn main() {
         .unwrap();
 
     let config = cli.align_config.clone();
-    CONFIG.set(cli.align_config).expect("Config already initialized");
+    CONFIG.set(config.clone()).expect("Config already initialized");
 
     let output_path = &cli.output_path;
 
@@ -146,6 +146,8 @@ fn main() {
 
     {
         let mut handle = writer.lock().unwrap();
+        writeln!(handle, "# ALAMEM START").unwrap();
+        writeln!(handle, "# Options: {:?}", cli).unwrap();
         // Because I messed up naming of variables, so the column labels don't correspond to variable names
         // TODO: refactor so variable names match column labels
         // (refactor needed is in the variable names for the compute_chunk text_buffer)
@@ -304,6 +306,11 @@ fn main() {
             compute_chunk(c, &mut text_buffer, &mut thread_bufs, &y_index, &writer, &pb_main, &pb_seqs, is_single_file, &recycle_tx);
         }
         if !text_buffer.is_empty() { writer.lock().unwrap().write_all(&text_buffer).unwrap(); }
+    }
+    {
+        let mut handle = writer.lock().unwrap();
+        writeln!(handle, "# ALAMEM END: Run completed successfully").unwrap();
+        handle.flush().unwrap();
     }
 
     writer.lock().unwrap().flush().unwrap();
