@@ -31,6 +31,7 @@ sudo snap install rustup --classic
 rustup default stable
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 ```
+2. A C compiler (e.g. GCC on Linux, Clang on Mac, etc.). `sudo apt install build-essential` will work on Debian/Ubuntu Linux based machines, while `xcode-select --install` will work on most modern Macs.
 
 Building takes around a minute (depending on # of cores).
 
@@ -63,7 +64,7 @@ curl -L https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem-l
 ./alamem -h
 ```
 
-**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/<yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64-v3.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
+**Important**: the binary was is about 10% slower. It is here for convenience, but we recommend compiling for your architecture using Option 1. Also, if you are on a pre-AVX2 x64 machine, you might need to download `https://github.com/yunwilliamyu/alamem/releases/latest/download/alamem-linux-x86_64.tar.gz` instead, but if you have any processor released this decade, that shouldn't be necessary.
 
 ## Quick start
 ```sh
