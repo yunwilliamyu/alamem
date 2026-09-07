@@ -48,8 +48,6 @@ impl FlatChunk {
 #[derive(Parser, Debug)]
 #[command(name = "alamem", version)]
 struct AlamemCli {
-    #[arg(short = 'v', long, action = clap::ArgAction::Version)]
-    version: Option<bool>,
     /// The streamed database. Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
     pub database: String,
     /// The indexed query file(s). Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
