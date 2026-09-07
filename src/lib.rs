@@ -742,7 +742,11 @@ pub fn align_strand(
                 }
             }
 
-            for j_chain in (window_start..i_chain).rev() {
+            // Prevent pathological repeat for causing near infinite time
+            const MAX_CHAIN_LOOKBACK: usize = 5000;
+            let lookback_start = window_start.max(i_chain.saturating_sub(MAX_CHAIN_LOOKBACK));
+            for j_chain in (lookback_start..i_chain).rev() {
+            //for j_chain in (window_start..i_chain).rev() {
                 let h_j = bufs.mems[j_chain];
 
                 // Enforce collinearity
@@ -926,50 +930,118 @@ pub fn process_query_sequence(
     bufs.encoded_rev = q_seq_rev;
 }
 
+// ============================================================================
+// Patch 1: src/lib.rs -- replace `filter_overlapping_hits` wholesale.
+//
+// Same output as the current version (identical greedy, identical kept order),
+// but the inner scan is bounded instead of scanning every kept hit.
+//
+// Key observation: the test is `q_overlap / hit_q_len > 0.5` and
+// `t_overlap / hit_t_len > 0.5`, i.e. both ratios are relative to the
+// *candidate*. Any sub-interval of A strictly longer than |A|/2 must contain
+// A's midpoint. So a kept hit can only suppress `hit` if it covers hit's q
+// midpoint AND hit's t midpoint. That turns "compare against everything kept"
+// into a stabbing query, which a coarse bucket grid answers in ~O(1).
+//
+// Requires `use rustc_hash::FxHashMap;` (already a dependency).
+// ============================================================================
+
+/// Query-axis bucket width for the stabbing index: 1 << 12 = 4096 bp.
+const STAB_BUCKET_SHIFT: usize = 12;
+/// Kept hits spanning more buckets than this go on a per-target "wide" list
+/// instead of being written into every bucket they touch.
+const MAX_BUCKETS_PER_HIT: usize = 64;
+/// Below this many hits the exhaustive scan is cheaper than building an index.
+const INDEX_THRESHOLD: usize = 512;
+
+#[inline]
+fn suppresses(hit: &Hit, kept: &Hit, hit_q_len: usize, hit_t_len: usize) -> bool {
+    if hit.t_id != kept.t_id {
+        return false;
+    }
+    let q_lo = hit.q_start.max(kept.q_start);
+    let q_hi = hit.q_end.min(kept.q_end);
+    if q_lo >= q_hi {
+        return false;
+    }
+    let t_lo = hit.t_start.max(kept.t_start);
+    let t_hi = hit.t_end.min(kept.t_end);
+    if t_lo >= t_hi {
+        return false;
+    }
+    let q_ratio = (q_hi - q_lo) as f64 / hit_q_len as f64;
+    let t_ratio = (t_hi - t_lo) as f64 / hit_t_len as f64;
+    q_ratio > 0.5 && t_ratio > 0.5
+}
+
 // Filters in place
 pub fn filter_overlapping_hits(hits: &mut Vec<Hit>) {
-    // Symmetric tiebreaker
+    let n = hits.len();
+    if n < 2 {
+        return;
+    }
+
+    // Symmetric tiebreaker (unchanged; score is i32 so cmp == partial_cmp)
     hits.sort_unstable_by(|a, b| {
-        b.score.partial_cmp(&a.score)
-        .unwrap_or(std::cmp::Ordering::Equal)
-        .then_with(|| {
+        b.score.cmp(&a.score).then_with(|| {
             let a_len = (a.q_end - a.q_start) + (a.t_end - a.t_start);
             let b_len = (b.q_end - b.q_start) + (b.t_end - b.t_start);
             b_len.cmp(&a_len)
         })
     });
 
-    let mut filtered_count = 0;
+    if n <= INDEX_THRESHOLD {
+        let mut filtered_count = 0usize;
+        for i in 0..n {
+            let hit = hits[i]; // Hit is Copy
+            let hq = hit.q_end - hit.q_start;
+            let ht = hit.t_end - hit.t_start;
+            let mut overlaps = false;
+            for j in 0..filtered_count {
+                if suppresses(&hit, &hits[j], hq, ht) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if !overlaps {
+                hits[filtered_count] = hit;
+                filtered_count += 1;
+            }
+        }
+        hits.truncate(filtered_count);
+        return;
+    }
 
-    for i in 0..hits.len() {
-        let hit = hits[i].clone();
+    // (t_id, q_bucket) -> indices into the compacted kept prefix hits[0..filtered_count]
+    let mut grid: FxHashMap<(usize, usize), Vec<u32>> = FxHashMap::default();
+    // t_id -> kept indices too wide to bucket; checked for every candidate on that target
+    let mut wide: FxHashMap<usize, Vec<u32>> = FxHashMap::default();
+
+    let mut filtered_count = 0usize;
+
+    for i in 0..n {
+        let hit = hits[i];
+        let hq = hit.q_end - hit.q_start;
+        let ht = hit.t_end - hit.t_start;
+        if hq == 0 || ht == 0 {
+            continue; // degenerate; the old code divided by zero here
+        }
+        let q_mid = hit.q_start + hq / 2;
+
         let mut overlaps = false;
 
-        // Calculate lengths for both Query and Target
-        let hit_q_len = hit.q_end - hit.q_start;
-        let hit_t_len = hit.t_end - hit.t_start;
-
-        for j in 0..filtered_count {
-            let kept = &hits[j];
-
-            // 1. Must map to the same target sequence to have a valid target overlap
-            if hit.t_id == kept.t_id {
-                let q_overlap_start = hit.q_start.max(kept.q_start);
-                let q_overlap_end = hit.q_end.min(kept.q_end);
-
-                let t_overlap_start = hit.t_start.max(kept.t_start);
-                let t_overlap_end = hit.t_end.min(kept.t_end);
-
-                // 2. Check if physical overlap exists on BOTH axes
-                if q_overlap_start < q_overlap_end && t_overlap_start < t_overlap_end {
-                    let q_overlap_len = q_overlap_end - q_overlap_start;
-                    let t_overlap_len = t_overlap_end - t_overlap_start;
-
-                    let q_ratio = q_overlap_len as f64 / hit_q_len as f64;
-                    let t_ratio = t_overlap_len as f64 / hit_t_len as f64;
-
-                    // 3. SYMMETRIZED CHECK: Overlap must be > 50% on BOTH Query and Target
-                    if q_ratio > 0.5 && t_ratio > 0.5 {
+        if let Some(cands) = grid.get(&(hit.t_id, q_mid >> STAB_BUCKET_SHIFT)) {
+            for &j in cands {
+                if suppresses(&hit, &hits[j as usize], hq, ht) {
+                    overlaps = true;
+                    break;
+                }
+            }
+        }
+        if !overlaps {
+            if let Some(cands) = wide.get(&hit.t_id) {
+                for &j in cands {
+                    if suppresses(&hit, &hits[j as usize], hq, ht) {
                         overlaps = true;
                         break;
                     }
@@ -977,10 +1049,24 @@ pub fn filter_overlapping_hits(hits: &mut Vec<Hit>) {
             }
         }
 
-        if !overlaps {
-            hits[filtered_count] = hit;
-            filtered_count += 1;
+        if overlaps {
+            continue;
         }
+
+        // Index the new kept hit at the slot it is about to occupy.
+        let slot = filtered_count as u32;
+        let b0 = hit.q_start >> STAB_BUCKET_SHIFT;
+        let b1 = b0.max((hit.q_end - 1) >> STAB_BUCKET_SHIFT);
+        if b1 - b0 + 1 > MAX_BUCKETS_PER_HIT {
+            wide.entry(hit.t_id).or_default().push(slot);
+        } else {
+            for b in b0..=b1 {
+                grid.entry((hit.t_id, b)).or_default().push(slot);
+            }
+        }
+
+        hits[filtered_count] = hit;
+        filtered_count += 1;
     }
 
     hits.truncate(filtered_count);

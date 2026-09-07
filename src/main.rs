@@ -46,8 +46,10 @@ impl FlatChunk {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "alamem")]
+#[command(name = "alamem", version)]
 struct AlamemCli {
+    #[arg(short = 'v', long, action = clap::ArgAction::Version)]
+    version: Option<bool>,
     /// The streamed database. Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
     pub database: String,
     /// The indexed query file(s). Can be .fasta, .fa, .gz, or .txt (listing paths to fastas)
@@ -113,10 +115,31 @@ fn compute_chunk(
     recycle_tx.send(chunk).ok();
 }
 
+fn write_options<W: std::io::Write>(writer: &mut W, cli: &AlamemCli) -> std::io::Result<()> {
+    // Pretty-print the CLI struct and process each line
+    let debug_str = format!("{:#?}", cli);
+    for line in debug_str.lines() {
+        let trimmed = line.trim();
+        // Skip structural braces from Debug formatting
+        if trimmed.ends_with('{') || trimmed == "}" || trimmed == "}," {
+            continue;
+        }
+        // Remove trailing commas and prefix with comment hash
+        let clean_line = trimmed.strip_suffix(',').unwrap_or(trimmed);
+        if !clean_line.is_empty() {
+            writeln!(writer, "# {}", clean_line)?;
+        }
+    }
+    Ok(())
+}
 
 fn main() {
     let cli = AlamemCli::parse();
-    eprintln!("{:#?}", cli);
+    let mut stdout = std::io::stdout().lock();
+    writeln!(stdout, "# ALAMEM START").unwrap();
+    writeln!(stdout, "# Version: {}", env!("CARGO_PKG_VERSION")).unwrap();
+    writeln!(stdout, "# Options:").unwrap();
+    write_options(&mut stdout, &cli).unwrap();
 
     let x_files = resolve_input(&cli.database);
     let total_x: usize = x_files.len();
@@ -147,7 +170,11 @@ fn main() {
     {
         let mut handle = writer.lock().unwrap();
         writeln!(handle, "# ALAMEM START").unwrap();
-        writeln!(handle, "# Options: {:?}", cli).unwrap();
+        writeln!(handle, "# Version: {}", env!("CARGO_PKG_VERSION")).unwrap();
+        writeln!(handle, "# Options:").unwrap();
+        write_options(&mut *handle, &cli).unwrap();
+
+
         // Because I messed up naming of variables, so the column labels don't correspond to variable names
         // TODO: refactor so variable names match column labels
         // (refactor needed is in the variable names for the compute_chunk text_buffer)
