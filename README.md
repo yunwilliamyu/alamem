@@ -22,7 +22,14 @@ See the [RELEASES](https://github.com/yunwilliamyu/alamem/releases) for alamem's
 
 ## Install
 
-#### Option 1: Build from source
+#### Option 1: Cargo install from crates.io
+```sh
+cargo install alamem
+alamem -h
+```
+You may also want to use `RUSTFLAGS="-C target-cpu=native" cargo install alamem` to get a 5-10% performance bump.
+
+#### Option 2: Build from source
 
 Requirements:
 1. [rust](https://www.rust-lang.org/tools/install) programming language and associated tools such as cargo are required and assumed to be in PATH. To download rust and add it to your path, run the following:
@@ -49,7 +56,7 @@ conda install -c bioconda skani
 ```
 -->
 
-#### Option 2: Pre-built x86-64 or ARM Linux statically compiled executable
+#### Option 3: Pre-built x86-64 or ARM Linux statically compiled executable
 We offer a pre-built statically compiled executable for x86-64 systems and ARM Linux. That is, if you're on an x86-64 or ARM Linux system, you can just download the appropriate binary and run it without installing anything.
 
 For using the latest version of alamem on x86-64:
