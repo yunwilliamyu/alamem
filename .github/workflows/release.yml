@@ -1,10 +1,11 @@
 name: Release
 
 on:
+  # Creating a release in the GitHub UI with a new tag also fires this push
+  # event, so both "git push --tags" and UI-created releases are covered.
+  # (Don't add a `release:` trigger: it would start a second, duplicate run.)
   push:
     tags: ['v*']
-  release:
-    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -144,15 +145,14 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Publish the crate to crates.io via Trusted Publishing (no stored secret).
-  # Only runs on a real tag push, so re-running via workflow_dispatch or a
-  # manually published release can't attempt a duplicate publish.
+  # Re-running on a tag is safe: crates.io rejects versions that already exist.
   # Bioconda builds from this crates.io tarball.
   # ---------------------------------------------------------------------------
   publish-crate:
     name: Publish to crates.io
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     environment: crates-io
     permissions:
       contents: read
@@ -191,6 +191,8 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          # Keep notes written in the UI; add the downloads table below them.
+          append_body: true
           body: |
             ## Downloads
 
