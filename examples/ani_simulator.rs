@@ -2,6 +2,9 @@ use alamem::{
     filter_overlapping_hits, process_query_sequence, AlignConfig, ThreadBuffers,
     YIndex, CONFIG,
 };
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::time::Instant;
 use clap::Parser;
 
@@ -28,6 +31,10 @@ struct AniSimCli {
     pub read_len: usize,
     pub target_ani: f64,
 
+    /// Optional TSV with one row per mapped simulated local alignment.
+    #[arg(long)]
+    pub detail_output: Option<PathBuf>,
+
     #[command(flatten)]
     pub align_config: AlignConfig,
 }
@@ -41,6 +48,7 @@ fn main() {
     let num_reads = cli.num_reads;
     let read_len = cli.read_len;
     let target_ani = cli.target_ani;
+    let detail_output = cli.detail_output.clone();
 
     let start_idx = Instant::now();
     let y_index = YIndex::build(&[target_file.clone()]);
@@ -65,6 +73,19 @@ fn main() {
 
     let mut thread_bufs = ThreadBuffers::new();
     let mut encoded_fwd = Vec::with_capacity(1024 * 1024);
+    let mut detail_writer = detail_output.map(|path| {
+        let mut writer = BufWriter::new(
+            File::create(&path)
+                .unwrap_or_else(|_| panic!("Failed to create detail output: {}", path.display())),
+        );
+        writeln!(
+            writer,
+            "read_index\ttarget_ani\tread_len\ttrue_local_ani\testimated_ani\tlocal_alignment_len\terror"
+        )
+        .expect("Failed to write detail header");
+        writer
+    });
+
     for i in 0..num_reads {
         encoded_fwd.clear();
 
@@ -185,7 +206,26 @@ fn main() {
                     i + 1, true_local_ani, est_ani, error, hit_len
                 );
             }
+
+            if let Some(writer) = detail_writer.as_mut() {
+                writeln!(
+                    writer,
+                    "{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{}\t{:.6}",
+                    i + 1,
+                    target_ani,
+                    read_len,
+                    true_local_ani,
+                    est_ani,
+                    hit_len,
+                    error,
+                )
+                .expect("Failed to write detail row");
+            }
         }
+    }
+
+    if let Some(writer) = detail_writer.as_mut() {
+        writer.flush().expect("Failed to flush detail output");
     }
 
     // Final Statistics
