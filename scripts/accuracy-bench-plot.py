@@ -8,9 +8,11 @@ except ImportError:
     print("Please run: pip install matplotlib numpy pandas")
     sys.exit(1)
 
+import sys
 
 
-df = pd.read_csv('accuracy.tsv', sep='\t')
+#df = pd.read_csv('accuracy.tsv', sep='\t')
+df = pd.read_csv(sys.argv[1], sep='\t')
 
 # Convert percentage columns to numeric
 df['Mean Bias'] = df['Mean Bias'].str.replace('%', '').astype(float)
@@ -71,4 +73,4 @@ ax3.grid(True, linestyle=':', alpha=0.4)
 
 plt.tight_layout()
 #plt.show()
-plt.savefig('accuracy.png')
+plt.savefig(sys.argv[1] + '.png')
