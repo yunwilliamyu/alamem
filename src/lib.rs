@@ -22,7 +22,7 @@ fn parse_odd_kmer(s: &str) -> Result<usize, String> {
 #[derive(Parser, Debug, Clone)]
 pub struct AlignConfig {
     /// K-mer size (odd integer between 9 and 15)
-    #[arg(short = 'k', long, default_value_t = 13, value_parser = parse_odd_kmer)]
+    #[arg(short = 'k', long, default_value_t = 15, value_parser = parse_odd_kmer)]
     pub kmer_size: usize,
 
     /// Stride for checking anchors [default: kmer_size]
@@ -32,7 +32,7 @@ pub struct AlignConfig {
     /// ANI filter for output hits
     #[arg(
     long,
-    default_value_t = 90.0,
+    default_value_t = 96.0,
     value_parser = |s: &str| -> Result<f64, String> {
         let val = s.parse::<f64>().map_err(|e| e.to_string())?;
         if (85.0..=100.0).contains(&val) {

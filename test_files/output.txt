@@ -5,9 +5,9 @@
 # y_files: "hidden_NZ_CP013494.1,2424,15275.fasta"
 # output_path: "output.txt"
 # threads: 0
-# kmer_size: 13
+# kmer_size: 15
 # stride: None
-# min_ani: 90.0
+# min_ani: 96.0
 # min_len: 40
 # max_seed_multiplicity: 1000000
 # max_chain_gap: 100
