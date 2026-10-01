@@ -136,6 +136,8 @@ This will produce `scripts/figures/accuracy.[tsv|png]`, which should be identica
 ## Citation
 Grace Oualline, Sakshi Pandey, Xiaolei Brian Zhang, Christina Boucher, and Yun William Yu. Approximate local alignment via chained MEM divergence estimation for detecting horizontal gene transfer. *In preparation*.
 
+Additional companion code is also available for [alasight](https://github.com/graceoualline/alasight), our method for detecting signatures of horizontal gene transfer using alamem, which is part of the same manuscript.
+
 ## Feature requests, issues
 alamem is actively being developed by me ([Yun William Yu](https://yunwilliamyu.net)). I'm more than happy to accommodate simple feature requests. Feel free to open an issue with your feature request on the GitHub repository. If you catch any bugs, please open an issue or e-mail me.
 
